@@ -42,12 +42,20 @@ Measured by `make bench` against a 2,000-invoice / 500-customer / 90-day simulat
 committed at [benchmarks/results.json](benchmarks/results.json) so you see it without running
 anything:
 
+<img src="docs/assets/benchmark_table.png" alt="Head-to-head recovery benchmark table — razorpay_default, static_1_3_7, dunning_only, heuristic" width="100%">
+
+<details>
+<summary>Same table, as text</summary>
+<br>
+
 | Policy | Recovery rate | Recovered | Attempts/recovery | Compliance violations |
 |---|---|---|---|---|
 | `razorpay_default` (the baseline — Razorpay's documented subscription retry schedule) | 17.9% | ₹236,427.79 | 4.91 | 0 |
 | `static_1_3_7` (fixed T+1/T+3/T+7) | 24.6% | ₹329,955.97 | 7.37 | 0 |
 | `dunning_only` (message, never retry) | 9.8% | ₹120,453.28 | 4.93 | 0 |
 | **`heuristic`** (this project — payday-aware, downtime-gated) | **46.2%** | **₹668,118.66** | 4.08 | 0 |
+
+</details>
 
 `learned` — a LightGBM hazard model estimating `P(success | t, class, context)` behind an
 expected-value planner — is trained on one held-out half of the cohort (cohort A) and scored
@@ -123,29 +131,25 @@ cohort so there's a full reasoning chain to click through immediately, alongside
 ## Where we deliberately did not use an LLM
 
 The LLM never decides timing, probability, retry eligibility, or anything that touches money
-arithmetic. Concretely, it is never on the path that:
+arithmetic. The boundary is drawn once and held everywhere:
 
-- decides *when* to retry, or on which rail
-- estimates `P(success)` for any candidate slot (that's a LightGBM model trained on observed
-  outcomes, in `policy/hazard.py` — no LLM output ever enters that training data)
-- decides whether a hard decline is retry-eligible (a fixed table, `diagnose/rules.py`)
-- computes a recovered amount, an expected value, or any `Money` arithmetic (`domain/money.py`
-  is `int` paise, boundary to boundary — never a float, never touched by an LLM)
-- approves or rejects a compliance rule (`compliance/guard.py` is pure Python, no I/O, no LLM)
+<img src="docs/assets/llm_boundary.png" alt="Never: retry timing, P(success), hard-decline eligibility, money arithmetic, compliance approval. Always with a fallback: unmapped-error classification, message drafting, policy compilation, batch narrative, decision explanation." width="100%">
 
-What it *is* used for, always with a deterministic fallback and never load-bearing: classifying
-an error string the rules table doesn't recognize (`diagnose/llm_fallback.py`, constrained to
-the `FailureClass` enum plus a confidence score — below threshold becomes `UNKNOWN`, never a
-guessed class presented as certain); drafting the customer-facing message in English, Hindi or
-Hinglish (`comms/generate.py`, validated against the canonical amount/date/merchant-name and
-an opt-out line before it can ever be sent — a string-equality check, not a vibe check);
-compiling a merchant's natural-language policy request into a typed, Pydantic-validated rule
-that a human must explicitly confirm before it activates (`llm/policy_compiler.py`); writing a
-batch root-cause narrative over deterministically-computed failure counts
-(`llm/narrative.py`); and turning one structured audit decision into a plain-English sentence
-for the dashboard (`audit/explain.py`). Anthropic unavailable → rules and templates, logged,
-`degraded: llm` on the dashboard, `make bench` produces the identical number either way
-(`tests/test_llm_fallback.py` proves this directly, not just by matching totals).
+Anthropic unavailable → rules and templates, logged, `degraded: llm` on the dashboard,
+`make bench` produces the identical number either way (`tests/test_llm_fallback.py` proves
+this directly, not just by matching totals).
+
+<details>
+<summary>Module references for the five "always, with a fallback" uses</summary>
+<br>
+
+- Unmapped-error classification — `diagnose/llm_fallback.py`, constrained to the `FailureClass` enum plus a confidence score
+- Customer-facing messages — `comms/generate.py`, English / Hindi / Hinglish, validated before send
+- Natural-language policy compilation — `llm/policy_compiler.py`, typed and Pydantic-validated
+- Batch root-cause narrative — `llm/narrative.py`, over deterministically-computed counts
+- Audit decision explanation — `audit/explain.py`, structured record stays authoritative
+
+</details>
 
 <br>
 
