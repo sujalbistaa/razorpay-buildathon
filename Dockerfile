@@ -7,5 +7,5 @@ COPY src ./src
 
 RUN pip install --no-cache-dir -e .
 
-# Placeholder until the API app exists (Phase 8) and `make up` is real.
-CMD ["python", "-c", "print('vasool: not implemented yet')"]
+EXPOSE 8000
+CMD ["uvicorn", "vasool.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

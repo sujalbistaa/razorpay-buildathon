@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Vasool — Inspector{% endblock %}
+{% block content %}
+
+<h1 class="text-xl font-semibold mb-4">Decision inspector</h1>
+<p class="text-sm text-slate-400 mb-6">Pick a seeded invoice to see its full reasoning chain: classification, payday inference, downtime state, every compliance rule evaluated, candidate EVs, the chosen action, and the outcome.</p>
+
+<div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+        {% for invoice_id in invoice_ids %}
+        <a href="/inspector/{{ invoice_id }}" class="block px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 font-mono text-xs text-center truncate" title="{{ invoice_id }}">{{ invoice_id }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

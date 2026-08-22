@@ -21,6 +21,7 @@ dependencies = [
     "jinja2",
     "matplotlib",
     "pyyaml",
+    "uvicorn",
 ]
 
 [project.optional-dependencies]

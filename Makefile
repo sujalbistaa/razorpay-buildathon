@@ -18,7 +18,7 @@ lint:
 	$(VENV)/bin/mypy scripts
 
 up:
-	@echo "not implemented"
+	$(VENV)/bin/uvicorn vasool.api.main:app --host 0.0.0.0 --port 8000
 
 seed:
 	$(VENV)/bin/python scripts/seed.py

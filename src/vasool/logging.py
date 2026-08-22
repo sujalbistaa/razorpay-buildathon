@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 
 import structlog
 
@@ -17,7 +16,14 @@ def configure_logging(level: int = logging.INFO) -> None:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(level),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        # No explicit `file=` -- PrintLoggerFactory's default binds to structlog's own stdout
+        # sentinel, which PrintLogger re-resolves against the live sys.stdout on every write
+        # instead of snapshotting whatever sys.stdout happened to be at configure_logging()
+        # time. Passing file=sys.stdout here previously snapshotted pytest's capsys-redirected
+        # stream during test_logging.py, which capsys then closes after that test -- poisoning
+        # every subsequent logger.* call in the same pytest session ("I/O operation on closed
+        # file"), since structlog.configure() is global process state.
+        logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
 

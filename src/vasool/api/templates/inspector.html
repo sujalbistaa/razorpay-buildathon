@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Vasool — Inspector — {{ invoice_id }}{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <a href="/inspector" class="text-xs text-slate-500 hover:text-slate-300">← all invoices</a>
+        <h1 class="text-xl font-semibold font-mono mt-1">{{ trace.invoice.invoice_id }}</h1>
+    </div>
+    <div class="flex gap-2">
+        {% if trace.degraded %}
+        <span class="px-2 py-1 rounded text-xs font-mono bg-amber-900 text-amber-300">model: degraded</span>
+        {% endif %}
+        <span class="px-2 py-1 rounded text-xs font-mono bg-slate-800 text-slate-400">policy: {{ trace.policy_version }}</span>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Failure event</h2>
+        <dl class="text-sm grid grid-cols-2 gap-y-1">
+            <dt class="text-slate-500">customer</dt><dd class="font-mono">{{ trace.invoice.customer_id }}</dd>
+            <dt class="text-slate-500">amount</dt><dd>{{ trace.invoice.amount.format_inr() }}</dd>
+            <dt class="text-slate-500">category</dt><dd>{{ trace.invoice.category.value }}</dd>
+            <dt class="text-slate-500">first failed at</dt><dd class="font-mono">{{ trace.invoice.first_failed_at }}</dd>
+            <dt class="text-slate-500">classification</dt><dd class="font-semibold">{{ trace.failure_class.value }}</dd>
+        </dl>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Payday posterior</h2>
+        <dl class="text-sm grid grid-cols-2 gap-y-1">
+            <dt class="text-slate-500">MAP estimate</dt><dd>day {{ trace.payday_map_estimate }} of month (IST)</dd>
+            <dt class="text-slate-500">credible interval</dt><dd>[{{ trace.payday_credible_interval[0] }}, {{ trace.payday_credible_interval[1] }}]</dd>
+            <dt class="text-slate-500">confidence</dt><dd>{{ '%.0f%%'|format(trace.payday_confidence * 100) }}</dd>
+            <dt class="text-slate-500">observations</dt><dd>{{ trace.payday_n_observations }}</dd>
+        </dl>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Downtime known at decision time</h2>
+        {% if trace.known_downtime_windows %}
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-slate-400 border-b border-slate-800">
+                    <th class="py-1 pr-4">Issuer</th><th class="py-1 pr-4">Method</th><th class="py-1 pr-4">Severity</th>
+                    <th class="py-1 pr-4">Begin</th><th class="py-1 pr-4">End</th><th class="py-1 pr-4">Scheduled</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in trace.known_downtime_windows %}
+                <tr class="border-b border-slate-900">
+                    <td class="py-1 pr-4">{{ w.issuer }}</td><td class="py-1 pr-4">{{ w.method.value }}</td>
+                    <td class="py-1 pr-4">{{ w.severity.value }}</td><td class="py-1 pr-4 font-mono">{{ w.begin }}</td>
+                    <td class="py-1 pr-4 font-mono">{{ w.end }}</td><td class="py-1 pr-4">{{ 'yes' if w.scheduled else 'no' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-sm text-slate-500">No known downtime windows.</p>
+        {% endif %}
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Candidate debit slots{% if not trace.ev_eligible %} <span class="text-xs text-slate-500 font-normal">(not EV-eligible for this action — heuristic policy in effect)</span>{% endif %}</h2>
+        {% if trace.candidates %}
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-slate-400 border-b border-slate-800">
+                    <th class="py-1 pr-4">Debit at (IST)</th><th class="py-1 pr-4">p(success)</th><th class="py-1 pr-4">EV</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in trace.candidates %}
+                <tr class="border-b border-slate-900">
+                    <td class="py-1 pr-4 font-mono">{{ c.debit_at }}</td>
+                    <td class="py-1 pr-4">{{ '%.1f%%'|format(c.p_success * 100) }}</td>
+                    <td class="py-1 pr-4">₹{{ '%.2f'|format(c.ev_paise / 100) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-sm text-slate-500">No candidates costed for this invoice.</p>
+        {% endif %}
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Plan &amp; compliance verdicts</h2>
+        <div class="space-y-3">
+            {% for at in trace.attempts %}
+            <div class="border border-slate-800 rounded p-3 {{ 'bg-emerald-950/30' if at.approved else 'bg-rose-950/30' }}">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span class="font-mono">#{{ at.attempt.attempt_index }} · {{ at.attempt.action_type.value }} · {{ at.attempt.rail.value }} · {{ at.attempt.amount.format_inr() }}</span>
+                    <span class="px-2 py-0.5 rounded text-xs {{ 'bg-emerald-900 text-emerald-300' if at.approved else 'bg-rose-900 text-rose-300' }}">
+                        {{ 'approved' if at.approved else 'rejected' }}
+                    </span>
+                </div>
+                <div class="text-xs text-slate-500 font-mono mt-1">
+                    {% if at.attempt.notify_at %}notify: {{ at.attempt.notify_at }}{% endif %}
+                    {% if at.attempt.debit_at %}{{ ' · ' if at.attempt.notify_at }}debit: {{ at.attempt.debit_at }}{% endif %}
+                </div>
+                <ul class="mt-2 space-y-0.5 text-xs">
+                    {% for r in at.compliance_results %}
+                    <li class="{{ 'text-emerald-400' if r.passed else 'text-rose-400' }}">
+                        {{ '✓' if r.passed else '✗' }} {{ r.rule_id }}{% if r.reason %} — {{ r.reason }}{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% else %}
+            <p class="text-sm text-slate-500">No attempts planned.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Stop rule</h2>
+        <p class="text-sm">{{ trace.stop_rule.value if trace.stop_rule else '— plan still open —' }}</p>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Outcome</h2>
+        {% if trace.outcome %}
+        <dl class="text-sm grid grid-cols-2 gap-y-1">
+            <dt class="text-slate-500">recovered</dt><dd>{{ 'yes' if trace.outcome.recovered else 'no' }}</dd>
+            <dt class="text-slate-500">recovered amount</dt><dd>₹{{ '%.2f'|format(trace.outcome.recovered_paise / 100) }}</dd>
+            <dt class="text-slate-500">attempts made</dt><dd>{{ trace.outcome.attempts_made }} ({{ trace.outcome.silent_attempts_made }} silent)</dd>
+            <dt class="text-slate-500">messages sent</dt><dd>{{ trace.outcome.messages_sent }} ({{ trace.outcome.false_dunning_messages }} false dunning)</dd>
+            <dt class="text-slate-500">days to recovery</dt><dd>{{ '%.1f'|format(trace.outcome.days_to_recovery) if trace.outcome.days_to_recovery is not none else '—' }}</dd>
+            <dt class="text-slate-500">blocked attempts</dt><dd>{{ trace.outcome.blocked_attempts }}</dd>
+            <dt class="text-slate-500">compliance violations</dt><dd>{{ trace.outcome.compliance_violations }}</dd>
+        </dl>
+        {% else %}
+        <p class="text-sm text-slate-500">No outcome recorded.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

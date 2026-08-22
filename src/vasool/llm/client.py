@@ -44,14 +44,17 @@ class FallbackTriggered:
     reason: str
 
 
-def _stub_mode() -> bool:
+def is_stub_mode() -> bool:
+    """Public, not just an LLMClient implementation detail: api/dashboard.py reads this
+    directly to render the `llm` degraded-mode badge.
+    """
     return os.environ.get("VASOOL_LLM", "stub") != "anthropic"
 
 
 class LLMClient:
     def __init__(self) -> None:
         self._client: anthropic.Anthropic | None = (
-            None if _stub_mode() else anthropic.Anthropic(timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_RETRIES)
+            None if is_stub_mode() else anthropic.Anthropic(timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_RETRIES)
         )
 
     def parse(self, *, system: str, user: str, output_format: type[T], max_tokens: int = 1024) -> T | FallbackTriggered:
