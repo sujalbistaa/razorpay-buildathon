@@ -1,4 +1,18 @@
-# Revora
+<div align="center">
+
+<img src="docs/assets/banner.png" alt="Revora — autonomous recovery for failed recurring payments" width="100%">
+
+<br><br>
+
+<img src="https://img.shields.io/badge/python-3.11-146b45?style=flat-square&labelColor=1c1b17" alt="python 3.11">
+<img src="https://img.shields.io/badge/tests-310_passing-146b45?style=flat-square&labelColor=1c1b17" alt="310 tests passing">
+<img src="https://img.shields.io/badge/compliance_violations-0-146b45?style=flat-square&labelColor=1c1b17" alt="zero compliance violations">
+<img src="https://img.shields.io/badge/mypy-strict-146b45?style=flat-square&labelColor=1c1b17" alt="mypy strict">
+<img src="https://img.shields.io/badge/docker_compose_up-77s_cold-146b45?style=flat-square&labelColor=1c1b17" alt="docker compose up in 77 seconds">
+
+</div>
+
+<br>
 
 An autonomous recovery agent for failed recurring payments in India: it decides *whether,
 when, and on which rail* to retry each failed debit, executes a bounded RBI-compliant recovery
@@ -6,24 +20,23 @@ workflow with explicit stopping rules, and reports rupees recovered against Razo
 documented retry baseline — with a full, append-only audit trail and zero compliance
 violations, asserted by a test that fails the build if that ever stops being true.
 
-## Architecture
-
-```mermaid
-flowchart LR
-    W["webhook / batch job"] --> D
-    D["DIAGNOSE<br/>rules table → LLM fallback"] --> P
-    P["POLICY<br/>heuristic / learned hazard model"] --> C
-    C{"COMPLIANCE<br/>15-rule hard gate"}
-    C -->|Rejected| STOP["logged, never executed"]
-    C -->|Approved| E
-    E["EXECUTOR<br/>RazorpayClient | SimulatorClient<br/>one Protocol"] --> A
-    A["AUDIT<br/>append-only decision log"]
-```
-
-Full detail — the `Executor` Protocol trick that makes the benchmark honest, every compliance
-rule, and how the audit trail is structured — is in [ARCHITECTURE.md](ARCHITECTURE.md).
+<br>
 
 ## The number
+
+<div align="center">
+
+### `heuristic` recovers **2.6×** the invoices and **2.8×** the rupees of Razorpay's own documented retry schedule
+
+**46.2%** vs 17.9% recovery rate · **₹668,118.66** vs ₹236,427.79 recovered · same 2,000-invoice batch · **0** compliance violations, either arm
+
+</div>
+
+<br>
+
+<img src="docs/assets/dashboard.png" alt="Revora recovery dashboard — at-risk queue, recovery rate by failure class, head-to-head benchmark chart" width="100%">
+
+<br>
 
 Measured by `make bench` against a 2,000-invoice / 500-customer / 90-day simulated cohort,
 committed at [benchmarks/results.json](benchmarks/results.json) so you see it without running
@@ -35,11 +48,6 @@ anything:
 | `static_1_3_7` (fixed T+1/T+3/T+7) | 24.6% | ₹329,955.97 | 7.37 | 0 |
 | `dunning_only` (message, never retry) | 9.8% | ₹120,453.28 | 4.93 | 0 |
 | **`heuristic`** (this project — payday-aware, downtime-gated) | **46.2%** | **₹668,118.66** | 4.08 | 0 |
-
-`heuristic` recovers **2.6× the invoices and 2.8× the rupees** of `razorpay_default`, on the
-same 2,000-invoice batch — every arm in the table above at `compliance_violations: 0`
-(`tests/test_compliance_invariants.py` runs the full policy set and fails the build on the
-first one).
 
 `learned` — a LightGBM hazard model estimating `P(success | t, class, context)` behind an
 expected-value planner — is trained on one held-out half of the cohort (cohort A) and scored
@@ -64,6 +72,32 @@ stopping, ₹330,641.70; adding dunning messages for genuinely unrecoverable inv
 dominant contributors in this run — worth saying plainly rather than crediting every mechanism
 equally.
 
+<br>
+
+## Architecture
+
+```mermaid
+flowchart LR
+    W["webhook / batch job"] --> D
+    D["DIAGNOSE<br/>rules table → LLM fallback"] --> P
+    P["POLICY<br/>heuristic / learned hazard model"] --> C
+    C{"COMPLIANCE<br/>15-rule hard gate"}
+    C -->|Rejected| STOP["logged, never executed"]
+    C -->|Approved| E
+    E["EXECUTOR<br/>RazorpayClient | SimulatorClient<br/>one Protocol"] --> A
+    A["AUDIT<br/>append-only decision log"]
+```
+
+Full detail — the `Executor` Protocol trick that makes the benchmark honest, every compliance
+rule, and how the audit trail is structured — is in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+Click any invoice on the dashboard and the decision inspector shows the *entire* reasoning
+chain behind one decision — not a summary of it:
+
+<img src="docs/assets/inspector.png" alt="Revora decision inspector — failure event, payday posterior, downtime state, compliance verdicts per rule" width="100%">
+
+<br>
+
 ## Run it — `docker compose up`
 
 ```
@@ -83,6 +117,8 @@ cohort so there's a full reasoning chain to click through immediately, alongside
 - **Dashboard** (`/`) — at-risk queue, recovery-by-failure-class, the head-to-head chart above, degraded-mode badges (`llm` / `model` / `razorpay`).
 - **Decision inspector** (`/inspector`) — click any seeded invoice: the failure event, classification, inferred payday with its credible interval, downtime state at decision time, every compliance rule evaluated, candidate slots with their expected values, the chosen action, the stop rule, the outcome.
 - **DLQ** (`/admin/dlq`) — webhook deliveries whose processing raised, held for inspection and manual replay.
+
+<br>
 
 ## Where we deliberately did not use an LLM
 
@@ -111,6 +147,8 @@ for the dashboard (`audit/explain.py`). Anthropic unavailable → rules and temp
 `degraded: llm` on the dashboard, `make bench` produces the identical number either way
 (`tests/test_llm_fallback.py` proves this directly, not just by matching totals).
 
+<br>
+
 ## What this is not
 
 > The 2,000-invoice batch is synthetic. The lift is measured against a simulator whose
@@ -122,11 +160,14 @@ for the dashboard (`audit/explain.py`). Anthropic unavailable → rules and temp
 > and the payday prior would be re-fit. The live loop against Razorpay test-mode APIs is one
 > subscription end to end, not the batch.
 
-## Repo map
+<br>
+
+<details>
+<summary><b>Repo map</b></summary>
 
 ```
 revora/
-├── README.md, ARCHITECTURE.md, ASSUMPTIONS.md, CLAUDE.md, build-docs/
+├── README.md, ARCHITECTURE.md, ASSUMPTIONS.md
 ├── docker-compose.yml, Dockerfile, Makefile, pyproject.toml, .env.example
 ├── src/vasool/         Python package name predates the Revora rebrand; unchanged internally
 │   ├── domain/        types, enums, Money (int paise), FailureClass, Attempt, RecoveryPlan
@@ -146,7 +187,12 @@ revora/
 └── benchmarks/            results.json, report.md, robustness.md, plots — committed deliberately
 ```
 
-## Running the benchmark
+</details>
+
+<details>
+<summary><b>Running the benchmark</b></summary>
+
+<br>
 
 ```
 make install     # creates .venv, installs the pinned toolchain
@@ -159,7 +205,12 @@ make chaos       # 7 fault-injection scenarios against the real code paths above
 above without running anything. `make bench` reproduces it from the same seed, byte for byte
 (`tests/test_determinism.py` asserts this).
 
-## Running the live loop
+</details>
+
+<details>
+<summary><b>Running the live loop</b></summary>
+
+<br>
 
 ```
 make up          # dashboard + webhook receiver at localhost:8000, seeded data, no credentials needed
@@ -176,3 +227,13 @@ webhook needs a public HTTPS tunnel pointed at `make up`, out of scope for a sin
 script — documented in the script's own header. Test-mode limits that apply: max 30 Payment
 Links per business, card tokens valid 3 days, UPI Payment Links are not available in test mode
 at all.
+
+</details>
+
+<br>
+
+<div align="center">
+
+built by Sujal Bist
+
+</div>
