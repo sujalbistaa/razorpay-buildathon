@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 
+from vasool.diagnose.classify import classify_failure
 from vasool.domain.money import Money
 from vasool.domain.types import (
     ActionType,
@@ -19,6 +20,7 @@ from vasool.domain.types import (
     Invoice,
     InvoiceCategory,
 )
+from vasool.llm.client import LLMClient
 from vasool.sim.world import (
     CustomerGenerator,
     IssuerAvailability,
@@ -97,12 +99,19 @@ def generate_cohort(
     horizon_days: int,
     horizon_start: datetime = DEFAULT_HORIZON_START,
     config: dict[str, Any] | None = None,
+    llm_client: LLMClient | None = None,
 ) -> Cohort:
     # `config` defaults to disk (world.yaml) but bench/robustness.py passes a perturbed copy
     # in-memory -- BUILD_PLAN.md Phase 6's "re-run with world parameters perturbed +/-30-50%"
     # needs a cohort built from a modified config without writing a second YAML file to disk.
     if config is None:
         config = load_world_config()
+    # `llm_client` defaults to VASOOL_LLM's own default (stub, deterministic, no network) --
+    # invariant 8 holds as long as the caller doesn't opt into VASOOL_LLM=anthropic, at which
+    # point cohort generation inherits whatever nondeterminism a live LLM call carries, same
+    # as any other opt-in use of the real API.
+    if llm_client is None:
+        llm_client = LLMClient()
     rng = np.random.default_rng(seed)
 
     generator = CustomerGenerator(config, rng)
@@ -115,7 +124,9 @@ def generate_cohort(
     )
     world = World(customers_by_id, issuer_availability, config, seed)
 
-    invoices, origin_failures = _generate_invoices(rng, customers, n_invoices, horizon_start, horizon_days, config, world)
+    invoices, origin_failures = _generate_invoices(
+        rng, customers, n_invoices, horizon_start, horizon_days, config, world, llm_client
+    )
 
     return Cohort(
         seed=seed,
@@ -158,6 +169,7 @@ def _generate_invoices(
     horizon_days: int,
     config: dict[str, Any],
     world: World,
+    llm_client: LLMClient,
 ) -> tuple[tuple[Invoice, ...], dict[str, FailureClass]]:
     invoice_cfg = config["invoice"]
     amount_cfg = invoice_cfg["amount_inr"]
@@ -181,7 +193,8 @@ def _generate_invoices(
             first_failed_at=horizon_start + timedelta(days=offset_days),
         )
         origin_event = _generate_origin_failure(world, invoice, customer)
-        assert origin_event.reason is not None
         invoices.append(invoice)
-        origin_failures[invoice.invoice_id] = FailureClass(origin_event.reason)
+        # diagnose/rules.py first, diagnose/llm_fallback.py only if that returns no match --
+        # BUILD_DOC.md §6's "detection -> diagnosis" happens once here, not per policy arm.
+        origin_failures[invoice.invoice_id] = classify_failure(origin_event, llm_client)
     return tuple(invoices), origin_failures
