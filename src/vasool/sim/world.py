@@ -44,6 +44,7 @@ from vasool.domain.types import (
     Rail,
     Severity,
 )
+from vasool.execute.protocol import AttemptOutcome
 
 WORLD_YAML_PATH = Path(__file__).parent / "world.yaml"
 
@@ -290,12 +291,6 @@ class IssuerAvailability:
         return self._windows
 
 
-@dataclass(frozen=True)
-class AttemptOutcome:
-    success: bool
-    failure_event: FailureEvent | None
-
-
 class World:
     def __init__(
         self,
@@ -312,6 +307,9 @@ class World:
     def customer(self, customer_id: str) -> LatentCustomer:
         return self._customers[customer_id]
 
+    def is_issuer_down(self, issuer: str, method: Rail, t: datetime) -> bool:
+        return self._issuer_availability.is_down(issuer, method, t)
+
     def snapshot(self) -> World:
         # Nothing here is mutated by attempt() — see the module docstring. A World is already
         # its own snapshot; this exists so Phase 4's harness has a stable point to restore to
@@ -322,6 +320,12 @@ class World:
         return snapshot
 
     def attempt(self, invoice: Invoice, action: Attempt, t: datetime) -> AttemptOutcome:
+        """Resolves whether money actually moves. Only call this for a charge-capable action
+        (compliance.rules.CHARGE_ACTION_TYPES) — a PRE_DEBIT_NOTICE or CREDENTIAL_UPDATE_REQUEST
+        has no payment logic of its own and callers must not run one through here; it would
+        resolve through the same approval/decline machinery as a real debit and look like a
+        recovery that never happened. See bench/harness.py for where this gate lives.
+        """
         customer = self._customers[invoice.customer_id]
 
         def fail(failure_class: FailureClass, description: str) -> AttemptOutcome:

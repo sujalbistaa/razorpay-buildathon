@@ -24,7 +24,7 @@ seed:
 	$(VENV)/bin/python scripts/seed.py
 
 bench:
-	@echo "not implemented"
+	$(VENV)/bin/python scripts/bench.py
 
 chaos:
 	@echo "not implemented"

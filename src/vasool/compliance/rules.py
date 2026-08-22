@@ -47,6 +47,11 @@ NO_RETRY_ACTION_TYPES: frozenset[ActionType] = frozenset(
     {ActionType.SILENT_RETRY, ActionType.PRE_DEBIT_NOTICE}
 )
 
+# Action types that can actually move money. PRE_DEBIT_NOTICE, CREDENTIAL_UPDATE_REQUEST and
+# STOP never do — a caller must not resolve them through World.attempt() or an Executor's
+# payment logic, or a pure notification can spuriously "succeed" and look like a recovery.
+CHARGE_ACTION_TYPES: frozenset[ActionType] = frozenset({ActionType.SILENT_RETRY, ActionType.CONTACT_LINK})
+
 
 @dataclass(frozen=True)
 class OutboundMessage:

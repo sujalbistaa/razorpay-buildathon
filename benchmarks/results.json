@@ -1,0 +1,46 @@
+[
+  {
+    "arm": "no_retry",
+    "attempts_per_recovery": 0.0,
+    "compliance_violations": 0,
+    "false_dunning_rate": 0.0,
+    "invoices": 2000,
+    "mean_days_to_recovery": null,
+    "messages_sent": 0,
+    "recovery_rate": 0.0,
+    "total_recovered_paise": 0
+  },
+  {
+    "arm": "razorpay_default",
+    "attempts_per_recovery": 4.913649025069638,
+    "compliance_violations": 0,
+    "false_dunning_rate": 0.5005574136008919,
+    "invoices": 2000,
+    "mean_days_to_recovery": 1.0,
+    "messages_sent": 897,
+    "recovery_rate": 0.1795,
+    "total_recovered_paise": 23642779
+  },
+  {
+    "arm": "static_1_3_7",
+    "attempts_per_recovery": 7.369918699186992,
+    "compliance_violations": 0,
+    "false_dunning_rate": 0.3284153005464481,
+    "invoices": 2000,
+    "mean_days_to_recovery": 1.9634146341463414,
+    "messages_sent": 1830,
+    "recovery_rate": 0.246,
+    "total_recovered_paise": 32995597
+  },
+  {
+    "arm": "dunning_only",
+    "attempts_per_recovery": 2.6321525885558583,
+    "compliance_violations": 0,
+    "false_dunning_rate": 0.484472049689441,
+    "invoices": 2000,
+    "mean_days_to_recovery": 0.0,
+    "messages_sent": 966,
+    "recovery_rate": 0.1835,
+    "total_recovered_paise": 23966090
+  }
+]

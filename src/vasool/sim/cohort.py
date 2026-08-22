@@ -11,7 +11,14 @@ from typing import Any
 import numpy as np
 
 from vasool.domain.money import Money
-from vasool.domain.types import Invoice, InvoiceCategory
+from vasool.domain.types import (
+    ActionType,
+    Attempt,
+    FailureClass,
+    FailureEvent,
+    Invoice,
+    InvoiceCategory,
+)
 from vasool.sim.world import (
     CustomerGenerator,
     IssuerAvailability,
@@ -19,6 +26,12 @@ from vasool.sim.world import (
     World,
     load_world_config,
 )
+
+# How many synthetic probes to try before giving up on finding a genesis failure for an
+# invoice — see _generate_origin_failure. A well-funded, active-mandate customer only fails
+# via the final Bernoulli(issuer_base_approval_rate) branch, so exhausting N probes happens
+# with probability ~0.85^N; at N=500 that's effectively zero even across a 2,000-invoice batch.
+MAX_ORIGIN_FAILURE_PROBES = 500
 
 # Fixed reference instant for the simulated horizon — never datetime.now() (CLAUDE.md invariant 8).
 DEFAULT_HORIZON_START = datetime(2026, 1, 1, tzinfo=UTC)
@@ -31,6 +44,13 @@ class Cohort:
     horizon_days: int
     customers: tuple[LatentCustomer, ...]
     invoices: tuple[Invoice, ...]
+    # invoice_id -> the FailureClass its genesis failure actually resolved to. A Invoice's
+    # first_failed_at is just a timestamp; nothing guarantees World.attempt() queried at
+    # that exact instant resolves to a failure, so this is computed once at generation time
+    # (see _generate_origin_failure) rather than assumed. Shared across every policy arm,
+    # same as the rest of the cohort — BUILD_DOC.md §8's "identical latent customer states
+    # across all arms" extends to the failure each invoice actually started from.
+    origin_failures: dict[str, FailureClass]
     world: World
 
     def content_hash(self) -> str:
@@ -40,6 +60,7 @@ class Cohort:
             "horizon_days": self.horizon_days,
             "customers": [_customer_repr(c) for c in self.customers],
             "invoices": [_invoice_repr(i) for i in self.invoices],
+            "origin_failures": {k: v.value for k, v in sorted(self.origin_failures.items())},
         }
         blob = json.dumps(payload, sort_keys=True, default=str)
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -89,7 +110,7 @@ def generate_cohort(
     )
     world = World(customers_by_id, issuer_availability, config, seed)
 
-    invoices = _generate_invoices(rng, customers, n_invoices, horizon_start, horizon_days, config)
+    invoices, origin_failures = _generate_invoices(rng, customers, n_invoices, horizon_start, horizon_days, config, world)
 
     return Cohort(
         seed=seed,
@@ -97,8 +118,31 @@ def generate_cohort(
         horizon_days=horizon_days,
         customers=customers,
         invoices=invoices,
+        origin_failures=origin_failures,
         world=world,
     )
+
+
+def _generate_origin_failure(world: World, invoice: Invoice, customer: LatentCustomer) -> FailureEvent:
+    """The invoice's first_failed_at is a timestamp, not a guarantee. Probe World.attempt()
+    at that instant with a synthetic negative attempt_index (never collides with a real
+    recovery attempt's index, which starts at 0) until it actually resolves to a failure.
+    """
+    for probe in range(1, MAX_ORIGIN_FAILURE_PROBES + 1):
+        attempt = Attempt(
+            invoice_id=invoice.invoice_id,
+            attempt_index=-probe,
+            action_type=ActionType.SILENT_RETRY,
+            rail=customer.mandate_rail,
+            amount=invoice.amount,
+            notify_at=None,
+            debit_at=invoice.first_failed_at,
+        )
+        outcome = world.attempt(invoice, attempt, invoice.first_failed_at)
+        if not outcome.success:
+            assert outcome.failure_event is not None
+            return outcome.failure_event
+    raise RuntimeError(f"no genesis failure found for {invoice.invoice_id} after {MAX_ORIGIN_FAILURE_PROBES} probes")
 
 
 def _generate_invoices(
@@ -108,7 +152,8 @@ def _generate_invoices(
     horizon_start: datetime,
     horizon_days: int,
     config: dict[str, Any],
-) -> tuple[Invoice, ...]:
+    world: World,
+) -> tuple[tuple[Invoice, ...], dict[str, FailureClass]]:
     invoice_cfg = config["invoice"]
     amount_cfg = invoice_cfg["amount_inr"]
     category_probs = invoice_cfg["category_probabilities"]
@@ -117,18 +162,21 @@ def _generate_invoices(
     category_weights = category_weights / category_weights.sum()
 
     invoices = []
+    origin_failures: dict[str, FailureClass] = {}
     for i in range(n_invoices):
         customer = customers[int(rng.integers(0, len(customers)))]
         amount_rupees = round(float(rng.lognormal(amount_cfg["mean_log"], amount_cfg["sigma_log"])), 2)
         category = InvoiceCategory(category_keys[int(rng.choice(len(category_keys), p=category_weights))])
         offset_days = float(rng.uniform(0, horizon_days))
-        invoices.append(
-            Invoice(
-                invoice_id=f"inv_{i:06d}",
-                customer_id=customer.customer_id,
-                amount=Money.from_rupees(amount_rupees),
-                category=category,
-                first_failed_at=horizon_start + timedelta(days=offset_days),
-            )
+        invoice = Invoice(
+            invoice_id=f"inv_{i:06d}",
+            customer_id=customer.customer_id,
+            amount=Money.from_rupees(amount_rupees),
+            category=category,
+            first_failed_at=horizon_start + timedelta(days=offset_days),
         )
-    return tuple(invoices)
+        origin_event = _generate_origin_failure(world, invoice, customer)
+        assert origin_event.reason is not None
+        invoices.append(invoice)
+        origin_failures[invoice.invoice_id] = FailureClass(origin_event.reason)
+    return tuple(invoices), origin_failures
