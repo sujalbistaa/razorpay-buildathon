@@ -1,83 +1,87 @@
 {% extends "base.html" %}
-{% block title %}Vasool — Dashboard{% endblock %}
+{% block title %}Revora — Dashboard{% endblock %}
 {% block content %}
 
-<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+<div class="flex flex-wrap items-start justify-between gap-4 mb-10 pb-8 border-b border-line">
     <div>
-        <h1 class="text-xl font-semibold">Recovery dashboard</h1>
-        <p class="text-sm text-slate-400">policy: <span class="font-mono">{{ policy_version }}</span></p>
+        <h1 class="font-display text-4xl font-semibold tracking-tight">Recovery dashboard</h1>
+        <p class="text-sm text-ink-muted mt-2">policy version <span class="font-mono text-ink">{{ policy_version }}</span></p>
     </div>
-    <div class="flex gap-2">
-        <span class="px-2 py-1 rounded text-xs font-mono {{ 'bg-amber-900 text-amber-300' if degraded.llm else 'bg-emerald-900 text-emerald-300' }}">
-            llm: {{ 'stub' if degraded.llm else 'live' }}
+    <div class="flex gap-2 flex-wrap">
+        {% set llm_ok = not degraded.llm %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] label {{ 'border-accent/30 bg-accent-soft text-accent-strong' if llm_ok else 'border-warn/30 bg-warn/10 text-warn' }}">
+            <span class="w-1.5 h-1.5 rounded-full {{ 'bg-accent' if llm_ok else 'bg-warn' }}"></span>
+            LLM {{ 'live' if llm_ok else 'stub' }}
         </span>
-        <span class="px-2 py-1 rounded text-xs font-mono {{ 'bg-amber-900 text-amber-300' if degraded.model else 'bg-emerald-900 text-emerald-300' }}">
-            model: {{ 'degraded' if degraded.model else 'ok' }}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] label {{ 'border-warn/30 bg-warn/10 text-warn' if degraded.model else 'border-accent/30 bg-accent-soft text-accent-strong' }}">
+            <span class="w-1.5 h-1.5 rounded-full {{ 'bg-warn' if degraded.model else 'bg-accent' }}"></span>
+            Model {{ 'degraded' if degraded.model else 'ok' }}
         </span>
-        <span class="px-2 py-1 rounded text-xs font-mono {{ 'bg-amber-900 text-amber-300' if degraded.razorpay else ('bg-slate-800 text-slate-400' if degraded.razorpay is none else 'bg-emerald-900 text-emerald-300') }}">
-            razorpay: {{ 'circuit open' if degraded.razorpay else ('not configured' if degraded.razorpay is none else 'ok') }}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] label {{ 'border-bad/30 bg-bad/10 text-bad' if degraded.razorpay else ('border-line bg-card text-ink-faint' if degraded.razorpay is none else 'border-accent/30 bg-accent-soft text-accent-strong') }}">
+            <span class="w-1.5 h-1.5 rounded-full {{ 'bg-bad' if degraded.razorpay else ('bg-ink-faint' if degraded.razorpay is none else 'bg-accent') }}"></span>
+            Razorpay {{ 'circuit open' if degraded.razorpay else ('not configured' if degraded.razorpay is none else 'ok') }}
         </span>
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <p class="text-xs text-slate-400 uppercase tracking-wide">At-risk invoices</p>
-        <p class="text-2xl font-semibold mt-1">{{ at_risk_count }}</p>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+    <div class="bg-card border border-line rounded p-5">
+        <p class="label text-[11px] text-ink-faint">At-risk invoices</p>
+        <p class="font-mono text-3xl font-semibold mt-2 tracking-tight">{{ at_risk_count }}</p>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <p class="text-xs text-slate-400 uppercase tracking-wide">At-risk revenue</p>
-        <p class="text-2xl font-semibold mt-1">{{ at_risk_total_inr }}</p>
+    <div class="bg-card border border-line rounded p-5">
+        <p class="label text-[11px] text-ink-faint">At-risk revenue</p>
+        <p class="font-mono text-3xl font-semibold mt-2 tracking-tight">{{ at_risk_total_inr }}</p>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <p class="text-xs text-slate-400 uppercase tracking-wide">Known downtime windows</p>
-        <p class="text-2xl font-semibold mt-1">{{ downtime_windows|length }}</p>
+    <div class="bg-card border border-line rounded p-5">
+        <p class="label text-[11px] text-ink-faint">Known downtime windows</p>
+        <p class="font-mono text-3xl font-semibold mt-2 tracking-tight">{{ downtime_windows|length }}</p>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Recovery rate by failure class</h2>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-10">
+    <div class="bg-card border border-line rounded p-5">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Recovery rate by failure class</h2>
         <canvas id="recoveryByClassChart" height="220"></canvas>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Head-to-head benchmark (recovery rate)</h2>
+    <div class="bg-card border border-line rounded p-5">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Head-to-head benchmark</h2>
         <canvas id="benchmarkChart" height="220"></canvas>
     </div>
 </div>
 
-<div class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-8">
-    <h2 class="text-sm font-semibold text-slate-300 mb-3">At-risk queue</h2>
+<div class="bg-card border border-line rounded p-5 mb-10">
+    <h2 class="label text-[11px] text-ink-faint mb-4">At-risk queue</h2>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
-                <tr class="text-left text-slate-400 border-b border-slate-800">
-                    <th class="py-2 pr-4">Invoice</th>
-                    <th class="py-2 pr-4">Customer</th>
-                    <th class="py-2 pr-4">Amount</th>
-                    <th class="py-2 pr-4">Failure class</th>
-                    <th class="py-2 pr-4">Source</th>
+                <tr class="text-left border-b border-line">
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Invoice</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Customer</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Amount</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Failure class</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Source</th>
                     <th class="py-2 pr-4"></th>
                 </tr>
             </thead>
             <tbody>
                 {% for inv in at_risk_invoices %}
-                <tr class="border-b border-slate-900 hover:bg-slate-800/50">
-                    <td class="py-2 pr-4 font-mono">{{ inv.invoice_id }}</td>
-                    <td class="py-2 pr-4 font-mono">{{ inv.customer_id }}</td>
-                    <td class="py-2 pr-4">{{ inv.amount_inr }}</td>
-                    <td class="py-2 pr-4">{{ inv.failure_class }}</td>
-                    <td class="py-2 pr-4">
-                        <span class="px-1.5 py-0.5 rounded text-xs {{ 'bg-sky-900 text-sky-300' if inv.source == 'live' else 'bg-slate-800 text-slate-400' }}">{{ inv.source }}</span>
+                <tr class="border-b border-line/70 hover:bg-accent-soft/40 transition-colors">
+                    <td class="py-2.5 pr-4 font-mono text-[13px]">{{ inv.invoice_id }}</td>
+                    <td class="py-2.5 pr-4 font-mono text-[13px] text-ink-muted">{{ inv.customer_id }}</td>
+                    <td class="py-2.5 pr-4 font-mono text-[13px]">{{ inv.amount_inr }}</td>
+                    <td class="py-2.5 pr-4">{{ inv.failure_class }}</td>
+                    <td class="py-2.5 pr-4">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] label {{ 'bg-accent-soft text-accent-strong' if inv.source == 'live' else 'bg-paper text-ink-faint border border-line' }}">{{ inv.source }}</span>
                     </td>
-                    <td class="py-2 pr-4">
+                    <td class="py-2.5 pr-4">
                         {% if inv.source == 'seed' %}
-                        <a href="/inspector/{{ inv.invoice_id }}" class="text-sky-400 hover:underline text-xs">inspect →</a>
+                        <a href="/inspector/{{ inv.invoice_id }}" class="text-accent hover:text-accent-strong hover:underline text-xs font-medium">inspect →</a>
                         {% endif %}
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="py-4 text-slate-500">Nothing at risk right now.</td></tr>
+                <tr><td colspan="6" class="py-6 text-ink-faint text-sm">Nothing at risk right now.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -85,29 +89,29 @@
 </div>
 
 {% if downtime_windows %}
-<div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-    <h2 class="text-sm font-semibold text-slate-300 mb-3">Downtime</h2>
+<div class="bg-card border border-line rounded p-5">
+    <h2 class="label text-[11px] text-ink-faint mb-4">Downtime</h2>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
-                <tr class="text-left text-slate-400 border-b border-slate-800">
-                    <th class="py-2 pr-4">Issuer</th>
-                    <th class="py-2 pr-4">Method</th>
-                    <th class="py-2 pr-4">Severity</th>
-                    <th class="py-2 pr-4">Begin</th>
-                    <th class="py-2 pr-4">End</th>
-                    <th class="py-2 pr-4">Resolved</th>
+                <tr class="text-left border-b border-line">
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Issuer</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Method</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Severity</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Begin</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">End</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Resolved</th>
                 </tr>
             </thead>
             <tbody>
                 {% for w in downtime_windows %}
-                <tr class="border-b border-slate-900">
-                    <td class="py-2 pr-4">{{ w.issuer }}</td>
-                    <td class="py-2 pr-4">{{ w.method }}</td>
-                    <td class="py-2 pr-4">{{ w.severity }}</td>
-                    <td class="py-2 pr-4 font-mono">{{ w.begin }}</td>
-                    <td class="py-2 pr-4 font-mono">{{ w.end or '—' }}</td>
-                    <td class="py-2 pr-4">{{ 'yes' if w.resolved else 'no' }}</td>
+                <tr class="border-b border-line/70">
+                    <td class="py-2.5 pr-4">{{ w.issuer }}</td>
+                    <td class="py-2.5 pr-4">{{ w.method }}</td>
+                    <td class="py-2.5 pr-4">{{ w.severity }}</td>
+                    <td class="py-2.5 pr-4 font-mono text-[13px] text-ink-muted">{{ w.begin }}</td>
+                    <td class="py-2.5 pr-4 font-mono text-[13px] text-ink-muted">{{ w.end or '—' }}</td>
+                    <td class="py-2.5 pr-4">{{ 'yes' if w.resolved else 'no' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -117,38 +121,54 @@
 {% endif %}
 
 <script>
+    const inkFaint = '#9a9689';
+    const line = '#e4e0d4';
+    const accent = '#146b45';
+    const baseline = '#c7c0ac';
+    const plexMono = "'IBM Plex Mono', monospace";
+
     const recoveryByClass = {{ recovery_by_class | tojson }};
     new Chart(document.getElementById('recoveryByClassChart'), {
         type: 'bar',
         data: {
-            labels: recoveryByClass.map(r => r.failure_class),
+            labels: recoveryByClass.map(r => r.failure_class.replaceAll('_', ' ')),
             datasets: [{
-                label: 'recovery rate',
                 data: recoveryByClass.map(r => r.rate),
-                backgroundColor: '#38bdf8',
+                backgroundColor: accent,
+                borderRadius: 3,
+                maxBarThickness: 20,
             }],
         },
         options: {
-            scales: { y: { beginAtZero: true, max: 1, ticks: { color: '#94a3b8' } }, x: { ticks: { color: '#94a3b8' } } },
-            plugins: { legend: { display: false } },
+            indexAxis: 'y',
+            scales: {
+                x: { beginAtZero: true, max: 1, grid: { color: line }, border: { display: false }, ticks: { color: inkFaint, font: { family: plexMono, size: 10 } } },
+                y: { grid: { display: false }, border: { color: line }, ticks: { color: '#1c1b17', font: { family: plexMono, size: 11 } } },
+            },
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1c1b17', titleFont: { family: plexMono }, bodyFont: { family: plexMono }, padding: 10, cornerRadius: 4 } },
         },
     });
 
     const benchmarkResults = {{ benchmark_results | tojson }};
+    const OURS = new Set(['heuristic', 'learned']);
     new Chart(document.getElementById('benchmarkChart'), {
         type: 'bar',
         data: {
             labels: benchmarkResults.map(r => r.arm),
             datasets: [{
-                label: 'recovery rate',
                 data: benchmarkResults.map(r => r.recovery_rate),
-                backgroundColor: '#34d399',
+                backgroundColor: benchmarkResults.map(r => OURS.has(r.arm) ? accent : baseline),
+                borderRadius: 3,
+                maxBarThickness: 22,
             }],
         },
         options: {
             indexAxis: 'y',
-            scales: { x: { beginAtZero: true, max: 1, ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } },
-            plugins: { legend: { display: false } },
+            scales: {
+                x: { beginAtZero: true, max: 1, grid: { color: line }, border: { display: false }, ticks: { color: inkFaint, font: { family: plexMono, size: 10 } } },
+                y: { grid: { display: false }, border: { color: line }, ticks: { color: '#1c1b17', font: { family: plexMono, size: 11 } } },
+            },
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1c1b17', titleFont: { family: plexMono }, bodyFont: { family: plexMono }, padding: 10, cornerRadius: 4 } },
         },
     });
 </script>

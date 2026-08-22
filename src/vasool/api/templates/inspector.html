@@ -1,140 +1,144 @@
 {% extends "base.html" %}
-{% block title %}Vasool — Inspector — {{ invoice_id }}{% endblock %}
+{% block title %}Revora — Inspector — {{ invoice_id }}{% endblock %}
 {% block content %}
 
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-start justify-between gap-4 mb-10 pb-8 border-b border-line">
     <div>
-        <a href="/inspector" class="text-xs text-slate-500 hover:text-slate-300">← all invoices</a>
-        <h1 class="text-xl font-semibold font-mono mt-1">{{ trace.invoice.invoice_id }}</h1>
+        <a href="/inspector" class="label text-[10px] text-ink-faint hover:text-accent transition-colors">← All invoices</a>
+        <h1 class="font-mono text-2xl font-semibold mt-2 tracking-tight">{{ trace.invoice.invoice_id }}</h1>
     </div>
-    <div class="flex gap-2">
+    <div class="flex gap-2 flex-wrap justify-end">
         {% if trace.degraded %}
-        <span class="px-2 py-1 rounded text-xs font-mono bg-amber-900 text-amber-300">model: degraded</span>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-warn/30 bg-warn/10 text-warn text-[11px] label">
+            <span class="w-1.5 h-1.5 rounded-full bg-warn"></span> Model degraded
+        </span>
         {% endif %}
-        <span class="px-2 py-1 rounded text-xs font-mono bg-slate-800 text-slate-400">policy: {{ trace.policy_version }}</span>
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full border border-line bg-card text-ink-muted text-[11px] label">{{ trace.policy_version }}</span>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Failure event</h2>
-        <dl class="text-sm grid grid-cols-2 gap-y-1">
-            <dt class="text-slate-500">customer</dt><dd class="font-mono">{{ trace.invoice.customer_id }}</dd>
-            <dt class="text-slate-500">amount</dt><dd>{{ trace.invoice.amount.format_inr() }}</dd>
-            <dt class="text-slate-500">category</dt><dd>{{ trace.invoice.category.value }}</dd>
-            <dt class="text-slate-500">first failed at</dt><dd class="font-mono">{{ trace.invoice.first_failed_at }}</dd>
-            <dt class="text-slate-500">classification</dt><dd class="font-semibold">{{ trace.failure_class.value }}</dd>
+    <div class="bg-card border border-line rounded p-5">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Failure event</h2>
+        <dl class="text-sm grid grid-cols-2 gap-y-2.5">
+            <dt class="text-ink-faint">Customer</dt><dd class="font-mono text-[13px]">{{ trace.invoice.customer_id }}</dd>
+            <dt class="text-ink-faint">Amount</dt><dd class="font-mono text-[13px]">{{ trace.invoice.amount.format_inr() }}</dd>
+            <dt class="text-ink-faint">Category</dt><dd>{{ trace.invoice.category.value }}</dd>
+            <dt class="text-ink-faint">First failed at</dt><dd class="font-mono text-[13px]">{{ trace.invoice.first_failed_at }}</dd>
+            <dt class="text-ink-faint">Classification</dt><dd class="font-semibold text-accent-strong">{{ trace.failure_class.value }}</dd>
         </dl>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Payday posterior</h2>
-        <dl class="text-sm grid grid-cols-2 gap-y-1">
-            <dt class="text-slate-500">MAP estimate</dt><dd>day {{ trace.payday_map_estimate }} of month (IST)</dd>
-            <dt class="text-slate-500">credible interval</dt><dd>[{{ trace.payday_credible_interval[0] }}, {{ trace.payday_credible_interval[1] }}]</dd>
-            <dt class="text-slate-500">confidence</dt><dd>{{ '%.0f%%'|format(trace.payday_confidence * 100) }}</dd>
-            <dt class="text-slate-500">observations</dt><dd>{{ trace.payday_n_observations }}</dd>
+    <div class="bg-card border border-line rounded p-5">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Payday posterior</h2>
+        <dl class="text-sm grid grid-cols-2 gap-y-2.5">
+            <dt class="text-ink-faint">MAP estimate</dt><dd>day {{ trace.payday_map_estimate }} of month (IST)</dd>
+            <dt class="text-ink-faint">Credible interval</dt><dd class="font-mono text-[13px]">[{{ trace.payday_credible_interval[0] }}, {{ trace.payday_credible_interval[1] }}]</dd>
+            <dt class="text-ink-faint">Confidence</dt><dd class="font-mono text-[13px]">{{ '%.0f%%'|format(trace.payday_confidence * 100) }}</dd>
+            <dt class="text-ink-faint">Observations</dt><dd class="font-mono text-[13px]">{{ trace.payday_n_observations }}</dd>
         </dl>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Downtime known at decision time</h2>
+    <div class="bg-card border border-line rounded p-5 lg:col-span-2">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Downtime known at decision time</h2>
         {% if trace.known_downtime_windows %}
         <table class="w-full text-sm">
             <thead>
-                <tr class="text-left text-slate-400 border-b border-slate-800">
-                    <th class="py-1 pr-4">Issuer</th><th class="py-1 pr-4">Method</th><th class="py-1 pr-4">Severity</th>
-                    <th class="py-1 pr-4">Begin</th><th class="py-1 pr-4">End</th><th class="py-1 pr-4">Scheduled</th>
+                <tr class="text-left border-b border-line">
+                    <th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">Issuer</th><th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">Method</th><th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">Severity</th>
+                    <th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">Begin</th><th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">End</th><th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">Scheduled</th>
                 </tr>
             </thead>
             <tbody>
                 {% for w in trace.known_downtime_windows %}
-                <tr class="border-b border-slate-900">
-                    <td class="py-1 pr-4">{{ w.issuer }}</td><td class="py-1 pr-4">{{ w.method.value }}</td>
-                    <td class="py-1 pr-4">{{ w.severity.value }}</td><td class="py-1 pr-4 font-mono">{{ w.begin }}</td>
-                    <td class="py-1 pr-4 font-mono">{{ w.end }}</td><td class="py-1 pr-4">{{ 'yes' if w.scheduled else 'no' }}</td>
+                <tr class="border-b border-line/70">
+                    <td class="py-2 pr-4">{{ w.issuer }}</td><td class="py-2 pr-4">{{ w.method.value }}</td>
+                    <td class="py-2 pr-4">{{ w.severity.value }}</td><td class="py-2 pr-4 font-mono text-[13px] text-ink-muted">{{ w.begin }}</td>
+                    <td class="py-2 pr-4 font-mono text-[13px] text-ink-muted">{{ w.end or '—' }}</td><td class="py-2 pr-4">{{ 'yes' if w.scheduled else 'no' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <p class="text-sm text-slate-500">No known downtime windows.</p>
+        <p class="text-sm text-ink-faint">No known downtime windows.</p>
         {% endif %}
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Candidate debit slots{% if not trace.ev_eligible %} <span class="text-xs text-slate-500 font-normal">(not EV-eligible for this action — heuristic policy in effect)</span>{% endif %}</h2>
+    <div class="bg-card border border-line rounded p-5 lg:col-span-2">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Candidate debit slots{% if not trace.ev_eligible %} <span class="text-ink-faint font-normal normal-case tracking-normal">(not EV-eligible for this action — heuristic policy in effect)</span>{% endif %}</h2>
         {% if trace.candidates %}
         <table class="w-full text-sm">
             <thead>
-                <tr class="text-left text-slate-400 border-b border-slate-800">
-                    <th class="py-1 pr-4">Debit at (IST)</th><th class="py-1 pr-4">p(success)</th><th class="py-1 pr-4">EV</th>
+                <tr class="text-left border-b border-line">
+                    <th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">Debit at (IST)</th><th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">p(success)</th><th class="py-1.5 pr-4 label text-[10px] text-ink-faint font-medium">EV</th>
                 </tr>
             </thead>
             <tbody>
                 {% for c in trace.candidates %}
-                <tr class="border-b border-slate-900">
-                    <td class="py-1 pr-4 font-mono">{{ c.debit_at }}</td>
-                    <td class="py-1 pr-4">{{ '%.1f%%'|format(c.p_success * 100) }}</td>
-                    <td class="py-1 pr-4">₹{{ '%.2f'|format(c.ev_paise / 100) }}</td>
+                <tr class="border-b border-line/70">
+                    <td class="py-2 pr-4 font-mono text-[13px]">{{ c.debit_at }}</td>
+                    <td class="py-2 pr-4 font-mono text-[13px]">{{ '%.1f%%'|format(c.p_success * 100) }}</td>
+                    <td class="py-2 pr-4 font-mono text-[13px]">₹{{ '%.2f'|format(c.ev_paise / 100) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <p class="text-sm text-slate-500">No candidates costed for this invoice.</p>
+        <p class="text-sm text-ink-faint">No candidates costed for this invoice.</p>
         {% endif %}
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Plan &amp; compliance verdicts</h2>
+    <div class="bg-card border border-line rounded p-5 lg:col-span-2">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Plan &amp; compliance verdicts</h2>
         <div class="space-y-3">
             {% for at in trace.attempts %}
-            <div class="border border-slate-800 rounded p-3 {{ 'bg-emerald-950/30' if at.approved else 'bg-rose-950/30' }}">
-                <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <span class="font-mono">#{{ at.attempt.attempt_index }} · {{ at.attempt.action_type.value }} · {{ at.attempt.rail.value }} · {{ at.attempt.amount.format_inr() }}</span>
-                    <span class="px-2 py-0.5 rounded text-xs {{ 'bg-emerald-900 text-emerald-300' if at.approved else 'bg-rose-900 text-rose-300' }}">
+            <div class="border border-line rounded overflow-hidden {{ 'border-l-4 border-l-accent' if at.approved else 'border-l-4 border-l-bad' }}">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-sm px-4 py-3 bg-paper">
+                    <span class="font-mono text-[13px]">#{{ at.attempt.attempt_index }} · {{ at.attempt.action_type.value }} · {{ at.attempt.rail.value }} · {{ at.attempt.amount.format_inr() }}</span>
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] label {{ 'bg-accent-soft text-accent-strong' if at.approved else 'bg-bad/10 text-bad' }}">
+                        <span class="w-1.5 h-1.5 rounded-full {{ 'bg-accent' if at.approved else 'bg-bad' }}"></span>
                         {{ 'approved' if at.approved else 'rejected' }}
                     </span>
                 </div>
-                <div class="text-xs text-slate-500 font-mono mt-1">
+                <div class="px-4 pt-3 text-xs text-ink-faint font-mono">
                     {% if at.attempt.notify_at %}notify: {{ at.attempt.notify_at }}{% endif %}
                     {% if at.attempt.debit_at %}{{ ' · ' if at.attempt.notify_at }}debit: {{ at.attempt.debit_at }}{% endif %}
                 </div>
-                <ul class="mt-2 space-y-0.5 text-xs">
+                <ul class="px-4 pt-2 pb-3 space-y-1 text-xs">
                     {% for r in at.compliance_results %}
-                    <li class="{{ 'text-emerald-400' if r.passed else 'text-rose-400' }}">
-                        {{ '✓' if r.passed else '✗' }} {{ r.rule_id }}{% if r.reason %} — {{ r.reason }}{% endif %}
+                    <li class="flex items-start gap-1.5 {{ 'text-accent-strong' if r.passed else 'text-bad' }}">
+                        <span class="font-mono shrink-0">{{ '✓' if r.passed else '✗' }}</span>
+                        <span class="font-mono">{{ r.rule_id }}</span>{% if r.reason %}<span class="text-ink-faint">— {{ r.reason }}</span>{% endif %}
                     </li>
                     {% endfor %}
                 </ul>
             </div>
             {% else %}
-            <p class="text-sm text-slate-500">No attempts planned.</p>
+            <p class="text-sm text-ink-faint">No attempts planned.</p>
             {% endfor %}
         </div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Stop rule</h2>
-        <p class="text-sm">{{ trace.stop_rule.value if trace.stop_rule else '— plan still open —' }}</p>
+    <div class="bg-card border border-line rounded p-5">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Stop rule</h2>
+        <p class="text-sm font-mono">{{ trace.stop_rule.value if trace.stop_rule else '— plan still open —' }}</p>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Outcome</h2>
+    <div class="bg-card border border-line rounded p-5">
+        <h2 class="label text-[11px] text-ink-faint mb-4">Outcome</h2>
         {% if trace.outcome %}
-        <dl class="text-sm grid grid-cols-2 gap-y-1">
-            <dt class="text-slate-500">recovered</dt><dd>{{ 'yes' if trace.outcome.recovered else 'no' }}</dd>
-            <dt class="text-slate-500">recovered amount</dt><dd>₹{{ '%.2f'|format(trace.outcome.recovered_paise / 100) }}</dd>
-            <dt class="text-slate-500">attempts made</dt><dd>{{ trace.outcome.attempts_made }} ({{ trace.outcome.silent_attempts_made }} silent)</dd>
-            <dt class="text-slate-500">messages sent</dt><dd>{{ trace.outcome.messages_sent }} ({{ trace.outcome.false_dunning_messages }} false dunning)</dd>
-            <dt class="text-slate-500">days to recovery</dt><dd>{{ '%.1f'|format(trace.outcome.days_to_recovery) if trace.outcome.days_to_recovery is not none else '—' }}</dd>
-            <dt class="text-slate-500">blocked attempts</dt><dd>{{ trace.outcome.blocked_attempts }}</dd>
-            <dt class="text-slate-500">compliance violations</dt><dd>{{ trace.outcome.compliance_violations }}</dd>
+        <dl class="text-sm grid grid-cols-2 gap-y-2.5">
+            <dt class="text-ink-faint">Recovered</dt><dd class="{{ 'text-accent-strong font-semibold' if trace.outcome.recovered else '' }}">{{ 'yes' if trace.outcome.recovered else 'no' }}</dd>
+            <dt class="text-ink-faint">Recovered amount</dt><dd class="font-mono text-[13px]">₹{{ '%.2f'|format(trace.outcome.recovered_paise / 100) }}</dd>
+            <dt class="text-ink-faint">Attempts made</dt><dd class="font-mono text-[13px]">{{ trace.outcome.attempts_made }} ({{ trace.outcome.silent_attempts_made }} silent)</dd>
+            <dt class="text-ink-faint">Messages sent</dt><dd class="font-mono text-[13px]">{{ trace.outcome.messages_sent }} ({{ trace.outcome.false_dunning_messages }} false dunning)</dd>
+            <dt class="text-ink-faint">Days to recovery</dt><dd class="font-mono text-[13px]">{{ '%.1f'|format(trace.outcome.days_to_recovery) if trace.outcome.days_to_recovery is not none else '—' }}</dd>
+            <dt class="text-ink-faint">Blocked attempts</dt><dd class="font-mono text-[13px]">{{ trace.outcome.blocked_attempts }}</dd>
+            <dt class="text-ink-faint">Compliance violations</dt><dd class="font-mono text-[13px]">{{ trace.outcome.compliance_violations }}</dd>
         </dl>
         {% else %}
-        <p class="text-sm text-slate-500">No outcome recorded.</p>
+        <p class="text-sm text-ink-faint">No outcome recorded.</p>
         {% endif %}
     </div>
 

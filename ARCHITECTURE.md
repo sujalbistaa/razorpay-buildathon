@@ -1,6 +1,6 @@
 # Architecture
 
-Vasool turns a failed recurring payment into a bounded, auditable, RBI-compliant recovery
+Revora turns a failed recurring payment into a bounded, auditable, RBI-compliant recovery
 attempt. This document is the flow, the `Executor` Protocol trick that makes the benchmark
 honest, the compliance guard, and the audit trail — the four things worth understanding before
 reading the code.

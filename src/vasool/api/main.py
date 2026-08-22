@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Vasool", lifespan=lifespan)
+app = FastAPI(title="Revora", lifespan=lifespan)
 app.include_router(dashboard.router)
 app.include_router(inspector.router)
 app.include_router(webhooks.router)

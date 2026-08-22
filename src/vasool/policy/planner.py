@@ -110,7 +110,7 @@ def build_pair(invoice: Invoice, context: PolicyContext, debit_at: datetime, sta
 
 def _message_for(invoice: Invoice, notify_at: datetime) -> OutboundMessage:
     return OutboundMessage(
-        merchant_name="Vasool", amount=invoice.amount, debit_date=ist_date(notify_at), opt_out_included=True
+        merchant_name="Revora", amount=invoice.amount, debit_date=ist_date(notify_at), opt_out_included=True
     )
 
 

@@ -48,7 +48,7 @@ from vasool.sim.cohort import Cohort
 
 # Not from a merchant record yet — Phase 8's dashboard/onboarding would supply this.
 # A placeholder is fine here: R014 checks the field is *present*, not what it says.
-PLACEHOLDER_MERCHANT_NAME = "Vasool"
+PLACEHOLDER_MERCHANT_NAME = "Revora"
 
 
 @dataclass(frozen=True)

@@ -129,7 +129,7 @@ class LearnedPolicy:
             debit_at=None,
         )
         message = OutboundMessage(
-            merchant_name="Vasool", amount=invoice.amount, debit_date=send_at.date(), opt_out_included=True
+            merchant_name="Revora", amount=invoice.amount, debit_date=send_at.date(), opt_out_included=True
         )
         rule_context = RuleContext(
             invoice=invoice, customer=context.customer, failure_class=context.failure_class, now=send_at,

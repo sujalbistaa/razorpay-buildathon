@@ -1,4 +1,4 @@
-# Vasool
+# Revora
 
 An autonomous recovery agent for failed recurring payments in India: it decides *whether,
 when, and on which rail* to retry each failed debit, executes a bounded RBI-compliant recovery
@@ -68,7 +68,7 @@ equally.
 
 ```
 git clone <this repo>
-cd vasool
+cd revora
 docker compose up
 ```
 
@@ -125,10 +125,10 @@ for the dashboard (`audit/explain.py`). Anthropic unavailable → rules and temp
 ## Repo map
 
 ```
-vasool/
+revora/
 ├── README.md, ARCHITECTURE.md, ASSUMPTIONS.md, CLAUDE.md, build-docs/
 ├── docker-compose.yml, Dockerfile, Makefile, pyproject.toml, .env.example
-├── src/vasool/
+├── src/vasool/         Python package name predates the Revora rebrand; unchanged internally
 │   ├── domain/        types, enums, Money (int paise), FailureClass, Attempt, RecoveryPlan
 │   ├── diagnose/       rules table, LLM fallback classifier
 │   ├── policy/         baselines, heuristic, learned, hazard model, payday inference, planner, Thompson exploration
@@ -169,7 +169,7 @@ make live        # scripts/live_demo.py — one real recovery loop against a rea
 `make live` needs real `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` **test-mode** credentials in
 your environment (copy `.env.example` → `.env`) and walks you through it interactively: create
 a Plan and Subscription, authorize the mandate in your browser, trigger a real "Charge as
-Failure" from the Razorpay Dashboard (test-mode only, no API for it), then Vasool classifies
+Failure" from the Razorpay Dashboard (test-mode only, no API for it), then Revora classifies
 the real failure, decides with the real policy layer, and creates a real test-mode Payment
 Link. It polls Razorpay's fetch APIs rather than consuming real webhooks — receiving a real
 webhook needs a public HTTPS tunnel pointed at `make up`, out of scope for a single unattended
