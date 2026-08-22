@@ -73,6 +73,36 @@ def test_simulator_client_does_not_cache_across_different_keys() -> None:
     assert len(client._seen) == 2
 
 
+def test_simulator_client_tracks_prior_message_count_per_invoice() -> None:
+    # World.attempt()'s CONTACT_LINK fatigue decay needs to see how many contact messages
+    # already went out for this invoice; SimulatorClient is the one that counts them, since
+    # the Executor Protocol itself carries no such field (a real RazorpayClient wouldn't take
+    # one either -- CLAUDE.md invariant 5).
+    cohort = generate_cohort(seed=1, n_customers=5, n_invoices=10, horizon_days=30)
+    invoice = cohort.invoices[0]
+    customer = cohort.world.customer(invoice.customer_id)
+    client = SimulatorClient(cohort.world)
+
+    def _contact(index: int) -> Attempt:
+        return Attempt(
+            invoice_id=invoice.invoice_id, attempt_index=index, action_type=ActionType.CONTACT_LINK,
+            rail=customer.mandate_rail, amount=invoice.amount, notify_at=invoice.first_failed_at, debit_at=None,
+        )
+
+    assert client._message_counts.get(invoice.invoice_id, 0) == 0
+    client.execute(invoice, _contact(0), invoice.first_failed_at, "key-0")
+    assert client._message_counts[invoice.invoice_id] == 1
+    client.execute(invoice, _contact(1), invoice.first_failed_at, "key-1")
+    assert client._message_counts[invoice.invoice_id] == 2
+    # A SILENT_RETRY on the same invoice must not bump the contact-message count.
+    silent = Attempt(
+        invoice_id=invoice.invoice_id, attempt_index=2, action_type=ActionType.SILENT_RETRY,
+        rail=customer.mandate_rail, amount=invoice.amount, notify_at=None, debit_at=invoice.first_failed_at,
+    )
+    client.execute(invoice, silent, invoice.first_failed_at, "key-2")
+    assert client._message_counts[invoice.invoice_id] == 2
+
+
 def test_audit_log_record_decision_and_outcome_are_append_only() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "audit.db")

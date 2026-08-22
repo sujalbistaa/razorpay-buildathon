@@ -209,6 +209,66 @@ def test_world_snapshot_restore_round_trips() -> None:
     assert world.restore(snap) is snap
 
 
+def test_contact_link_ignores_mandate_and_card_state() -> None:
+    # A contact link is a manual, out-of-band payment -- must not be gated by the mandate
+    # being revoked or the card being expired, the way a SILENT_RETRY would be.
+    customer = _customer(mandate_state=MandateState.REVOKED, card_state=CardState.EXPIRED, base_response_rate=1.0)
+    attempt = _attempt(action_type=ActionType.CONTACT_LINK, amount=Money.from_rupees(100))
+    outcome = _world(customer).attempt(_invoice(amount=Money.from_rupees(100)), attempt, NOW)
+    assert outcome.failure_event is None or outcome.failure_event.reason not in (
+        FailureClass.MANDATE_REVOKED.value,
+        FailureClass.CARD_EXPIRED.value,
+    )
+
+
+def test_contact_link_ignores_issuer_downtime() -> None:
+    customer = _customer(base_response_rate=1.0)
+    world = _world(customer, downtime=_downtime(Rail.UPI_AUTOPAY, Severity.HIGH))
+    attempt = _attempt(action_type=ActionType.CONTACT_LINK, amount=Money.from_rupees(100))
+    outcome = world.attempt(_invoice(amount=Money.from_rupees(100)), attempt, NOW)
+    assert outcome.failure_event is None or outcome.failure_event.reason != FailureClass.REMITTER_BANK_DOWN.value
+
+
+def test_contact_link_succeeds_when_response_certain_and_funded() -> None:
+    customer = _customer(base_response_rate=1.0, buffer=Money.from_rupees(10_000), salary=Money.from_rupees(50_000))
+    attempt = _attempt(action_type=ActionType.CONTACT_LINK, amount=Money.from_rupees(100))
+    outcome = _world(customer).attempt(_invoice(amount=Money.from_rupees(100)), attempt, NOW)
+    assert outcome.success is True
+
+
+def test_contact_link_fails_as_payment_cancelled_when_response_impossible() -> None:
+    customer = _customer(base_response_rate=0.0)
+    attempt = _attempt(action_type=ActionType.CONTACT_LINK, amount=Money.from_rupees(100))
+    outcome = _world(customer).attempt(_invoice(amount=Money.from_rupees(100)), attempt, NOW)
+    assert outcome.failure_event is not None
+    assert outcome.failure_event.reason == FailureClass.PAYMENT_CANCELLED.value
+
+
+def test_contact_link_fatigue_decay_reduces_response_odds_with_prior_messages() -> None:
+    # base_response_rate=1.0 alone would always respond (roll < 1.0 always true unless roll
+    # is exactly 1.0, which _digest_unit_interval can't produce); after enough fatigue decay
+    # the effective probability drops below whatever roll this (seed, invoice, attempt_index)
+    # produces, flipping the outcome to PAYMENT_CANCELLED.
+    customer = _customer(base_response_rate=1.0, fatigue_decay=0.01)
+    attempt = _attempt(action_type=ActionType.CONTACT_LINK, amount=Money.from_rupees(100))
+    invoice = _invoice(amount=Money.from_rupees(100))
+    fresh = _world(customer).attempt(invoice, attempt, NOW, prior_message_count=0)
+    fatigued = _world(customer).attempt(invoice, attempt, NOW, prior_message_count=5)
+    assert fresh.success is True
+    assert fatigued.success is False
+    assert fatigued.failure_event is not None
+    assert fatigued.failure_event.reason == FailureClass.PAYMENT_CANCELLED.value
+
+
+def test_contact_link_insufficient_funds_when_responsive_but_broke() -> None:
+    customer = _customer(base_response_rate=1.0, salary=Money.from_rupees(100), buffer=Money.from_rupees(0), spend_rate=0.5, payday_dom=1)
+    invoice = _invoice(amount=Money.from_rupees(10_000), first_failed_at=NOW - timedelta(days=200))
+    attempt = _attempt(action_type=ActionType.CONTACT_LINK, amount=Money.from_rupees(10_000))
+    outcome = _world(customer).attempt(invoice, attempt, NOW)
+    assert outcome.failure_event is not None
+    assert outcome.failure_event.reason == FailureClass.INSUFFICIENT_FUNDS.value
+
+
 def test_customer_generator_uses_only_the_seeded_rng() -> None:
     config = load_world_config()
     rng_a = np.random.default_rng(99)

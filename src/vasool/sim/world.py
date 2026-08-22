@@ -65,6 +65,19 @@ class CardState(StrEnum):
     REISSUED = "reissued"
 
 
+def _fail_outcome(invoice_id: str, t: datetime, failure_class: FailureClass, description: str) -> AttemptOutcome:
+    event = FailureEvent(
+        invoice_id=invoice_id,
+        code=failure_class.value.upper(),
+        description=description,
+        source=DEFAULT_SOURCE[failure_class],
+        step="payment_authorization",
+        reason=failure_class.value,
+        occurred_at=t,
+    )
+    return AttemptOutcome(success=False, failure_event=event)
+
+
 def _digest_unit_interval(*parts: object) -> float:
     """Deterministic uniform draw in [0, 1) from a hash of `parts` — no shared RNG state."""
     key = ":".join(str(p) for p in parts)
@@ -318,60 +331,87 @@ class World:
     def restore(self, snapshot: World) -> World:
         return snapshot
 
-    def attempt(self, invoice: Invoice, action: Attempt, t: datetime) -> AttemptOutcome:
+    def attempt(
+        self, invoice: Invoice, action: Attempt, t: datetime, *, prior_message_count: int = 0
+    ) -> AttemptOutcome:
         """Resolves whether money actually moves. Only call this for a charge-capable action
         (compliance.rules.CHARGE_ACTION_TYPES) — a PRE_DEBIT_NOTICE or CREDENTIAL_UPDATE_REQUEST
         has no payment logic of its own and callers must not run one through here; it would
         resolve through the same approval/decline machinery as a real debit and look like a
         recovery that never happened. See bench/harness.py for where this gate lives.
+
+        `prior_message_count` (how many CONTACT_LINK attempts already went out for this
+        invoice before this one) only matters for CONTACT_LINK resolution -- see
+        _resolve_contact_link. Every other action type ignores it; it's a keyword-only
+        default-0 addition so every existing SILENT_RETRY caller is untouched.
         """
         customer = self._customers[invoice.customer_id]
 
-        def fail(failure_class: FailureClass, description: str) -> AttemptOutcome:
-            event = FailureEvent(
-                invoice_id=invoice.invoice_id,
-                code=failure_class.value.upper(),
-                description=description,
-                source=DEFAULT_SOURCE[failure_class],
-                step="payment_authorization",
-                reason=failure_class.value,
-                occurred_at=t,
-            )
-            return AttemptOutcome(success=False, failure_event=event)
+        if action.action_type is ActionType.CONTACT_LINK:
+            # A contact link is the customer manually completing payment out-of-band, not the
+            # mandate debiting itself -- it must not be gated by mandate_state, card_state,
+            # issuer downtime or the mandate's own amount cap, all of which are debit-rail
+            # failure modes that don't apply to a one-off manual payment. This is also why
+            # CONTACT_LINK is the one action HeuristicPolicy still offers on a hard decline
+            # (heuristic.py's CONTACT_IMMEDIATELY / CREDENTIAL_UPDATE_THEN_STOP branches): the
+            # thing that's broken is the mandate, not the customer's ability to pay some other
+            # way. What *does* gate it is whether the customer engages at all.
+            return self._resolve_contact_link(customer, invoice, action, t, prior_message_count)
 
         if customer.mandate_state is MandateState.REVOKED:
-            return fail(FailureClass.MANDATE_REVOKED, "mandate revoked at the customer's bank")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.MANDATE_REVOKED, "mandate revoked at the customer's bank")
         if customer.mandate_state is MandateState.PAUSED:
-            return fail(FailureClass.MANDATE_PAUSED, "mandate paused at the customer's bank")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.MANDATE_PAUSED, "mandate paused at the customer's bank")
         if customer.card_state is CardState.EXPIRED:
-            return fail(FailureClass.CARD_EXPIRED, "card expired")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.CARD_EXPIRED, "card expired")
         if customer.card_state is CardState.BLOCKED:
-            return fail(FailureClass.DEBIT_INSTRUMENT_BLOCKED, "card blocked")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.DEBIT_INSTRUMENT_BLOCKED, "card blocked")
 
         if self._issuer_availability.is_down(customer.issuer, action.rail, t):
             if action.rail is Rail.CARD:
-                return fail(FailureClass.GATEWAY_TECHNICAL_ERROR, f"{customer.issuer} gateway down")
-            return fail(FailureClass.REMITTER_BANK_DOWN, f"{customer.issuer} remitter bank down")
+                return _fail_outcome(invoice.invoice_id, t, FailureClass.GATEWAY_TECHNICAL_ERROR, f"{customer.issuer} gateway down")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.REMITTER_BANK_DOWN, f"{customer.issuer} remitter bank down")
 
         if action.amount.paise > customer.mandate_max_amount.paise:
-            return fail(FailureClass.TRANSACTION_LIMIT_EXCEEDED, "amount exceeds registered mandate cap")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.TRANSACTION_LIMIT_EXCEEDED, "amount exceeds registered mandate cap")
 
         if action.action_type is ActionType.SILENT_RETRY:
             afa_limit = AFA_FREE_ELEVATED_LIMIT if invoice.category in AFA_ELEVATED_CATEGORIES else AFA_FREE_LIMIT
             if action.amount.paise > afa_limit.paise:
-                return fail(FailureClass.AFA_REQUIRED, "above the AFA-free ceiling, no AFA on a silent retry")
+                return _fail_outcome(invoice.invoice_id, t, FailureClass.AFA_REQUIRED, "above the AFA-free ceiling, no AFA on a silent retry")
 
         if _digest_unit_interval(self._seed, invoice.invoice_id, action.attempt_index, "velocity") < (
             self._config["bank_side_limits"]["velocity_exceeded_rate"]
         ):
-            return fail(FailureClass.VELOCITY_EXCEEDED, "velocity limit exceeded at customer's bank")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.VELOCITY_EXCEEDED, "velocity limit exceeded at customer's bank")
 
         if BalanceProcess.balance_at(customer, t).paise < action.amount.paise:
-            return fail(FailureClass.INSUFFICIENT_FUNDS, "insufficient balance at attempt time")
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.INSUFFICIENT_FUNDS, "insufficient balance at attempt time")
 
         approval_roll = _digest_unit_interval(self._seed, invoice.invoice_id, action.attempt_index, "approval")
         if approval_roll < self._config["issuer_availability"]["issuer_base_approval_rate"]:
             return AttemptOutcome(success=True, failure_event=None)
 
         generic_decline = FailureClass.CARD_DECLINED if action.rail is Rail.CARD else FailureClass.DEBIT_FAILED
-        return fail(generic_decline, "declined, no more specific reason available")
+        return _fail_outcome(invoice.invoice_id, t, generic_decline, "declined, no more specific reason available")
+
+    def _resolve_contact_link(
+        self, customer: LatentCustomer, invoice: Invoice, action: Attempt, t: datetime, prior_message_count: int
+    ) -> AttemptOutcome:
+        # fatigue_decay is a multiplicative odds reduction per message already sent
+        # (world.yaml: "engagement.fatigue_decay") -- the customer's odds of responding to
+        # the Nth contact on this invoice are base_response_rate * fatigue_decay**N.
+        fatigue = customer.fatigue_decay**prior_message_count
+        response_probability = customer.base_response_rate * fatigue
+        response_roll = _digest_unit_interval(self._seed, invoice.invoice_id, action.attempt_index, "response")
+        if response_roll >= response_probability:
+            # No FailureClass in the Phase 1 taxonomy means "customer never clicked the
+            # link" specifically -- PAYMENT_CANCELLED ("customer backed out mid-flow") is the
+            # closest existing member and is already DEFAULT_SOURCE-mapped to `customer`,
+            # which is the correct false-dunning-rate treatment here.
+            return _fail_outcome(
+                invoice.invoice_id, t, FailureClass.PAYMENT_CANCELLED, "customer did not complete the contact-link payment"
+            )
+        if BalanceProcess.balance_at(customer, t).paise < action.amount.paise:
+            return _fail_outcome(invoice.invoice_id, t, FailureClass.INSUFFICIENT_FUNDS, "insufficient balance at contact-link completion")
+        return AttemptOutcome(success=True, failure_event=None)
