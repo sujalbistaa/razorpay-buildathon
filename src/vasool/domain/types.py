@@ -126,7 +126,7 @@ class DowntimeWindow(FrozenModel):
     method: Rail
     severity: Severity
     begin: AwareDatetime
-    end: AwareDatetime
+    end: AwareDatetime | None  # None while the outage is still ongoing and unresolved
     scheduled: bool = False
 
 

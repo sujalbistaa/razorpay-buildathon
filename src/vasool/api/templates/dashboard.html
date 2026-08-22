@@ -14,6 +14,9 @@
         <span class="px-2 py-1 rounded text-xs font-mono {{ 'bg-amber-900 text-amber-300' if degraded.model else 'bg-emerald-900 text-emerald-300' }}">
             model: {{ 'degraded' if degraded.model else 'ok' }}
         </span>
+        <span class="px-2 py-1 rounded text-xs font-mono {{ 'bg-amber-900 text-amber-300' if degraded.razorpay else ('bg-slate-800 text-slate-400' if degraded.razorpay is none else 'bg-emerald-900 text-emerald-300') }}">
+            razorpay: {{ 'circuit open' if degraded.razorpay else ('not configured' if degraded.razorpay is none else 'ok') }}
+        </span>
     </div>
 </div>
 

@@ -22,6 +22,7 @@ dependencies = [
     "matplotlib",
     "pyyaml",
     "uvicorn",
+    "razorpay",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +64,11 @@ ignore_missing_imports = true
 # pandas-stubs is a separate, large dev dependency for one DataFrame construction site in
 # hazard.py; ignoring missing imports here avoids adding it just for that.
 module = "pandas.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# razorpay-python ships no type stubs and no py.typed marker.
+module = "razorpay.*"
 ignore_missing_imports = true
 
 [tool.ruff]

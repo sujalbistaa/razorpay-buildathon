@@ -27,7 +27,7 @@ bench:
 	$(VENV)/bin/python scripts/bench.py
 
 chaos:
-	@echo "not implemented"
+	$(VENV)/bin/python -m vasool.chaos
 
 live:
-	@echo "not implemented"
+	$(VENV)/bin/python scripts/live_demo.py

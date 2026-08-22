@@ -77,9 +77,13 @@ def dashboard(request: Request) -> HTMLResponse:
         if not (seed.results_by_invoice.get(inv.invoice_id) and seed.results_by_invoice[inv.invoice_id].recovered)
     ) + sum(row.amount_paise for row in store.list_open_invoices())
 
+    razorpay_client = request.app.state.razorpay_client
     degraded = {
         "llm": is_stub_mode(),
         "model": seed.degraded_model,
+        # None = no real Razorpay account configured (the common `make up` case, seeded data
+        # only) -- distinct from a configured client whose circuit breaker has opened.
+        "razorpay": razorpay_client.degraded if razorpay_client is not None else None,
     }
 
     return templates.TemplateResponse(

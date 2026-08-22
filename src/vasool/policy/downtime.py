@@ -18,12 +18,19 @@ class DowntimeTracker:
 
     def is_down(self, issuer: str, method: Rail, t: datetime) -> bool:
         return any(
-            w.issuer == issuer and w.method == method and w.begin <= t < w.end and w.severity is Severity.HIGH
+            w.issuer == issuer and w.method == method and w.begin <= t and (w.end is None or t < w.end)
+            and w.severity is Severity.HIGH
             for w in self.windows
         )
 
     def expected_resolution(self, issuer: str, method: Rail, t: datetime) -> datetime | None:
-        open_ends = [
-            w.end for w in self.windows if w.issuer == issuer and w.method == method and w.begin <= t < w.end
+        # None among open_ends means "still ongoing, no known end" -- distinct from "no
+        # matching window at all" (open_ends empty). Either way there's nothing to report a
+        # concrete resolution time for.
+        open_windows = [
+            w for w in self.windows if w.issuer == issuer and w.method == method and w.begin <= t
+            and (w.end is None or t < w.end)
         ]
-        return max(open_ends) if open_ends else None
+        if not open_windows or any(w.end is None for w in open_windows):
+            return None
+        return max(w.end for w in open_windows if w.end is not None)

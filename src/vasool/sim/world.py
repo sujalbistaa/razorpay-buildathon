@@ -281,8 +281,13 @@ class IssuerAvailability:
         return tuple(sorted(windows, key=lambda w: w.begin))
 
     def status_at(self, issuer: str, method: Rail, t: datetime) -> DowntimeWindow | None:
+        # The simulator always samples a concrete end up front (see the generator above);
+        # `end is None` is a live-data possibility (an ongoing, unresolved outage) that
+        # DowntimeWindow's type has to allow for either source, per its own docstring.
         for window in self._windows:
-            if window.issuer == issuer and window.method == method and window.begin <= t < window.end:
+            if window.issuer == issuer and window.method == method and window.begin <= t and (
+                window.end is None or t < window.end
+            ):
                 return window
         return None
 

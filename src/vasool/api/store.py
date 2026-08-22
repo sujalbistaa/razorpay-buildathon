@@ -46,6 +46,22 @@ class DowntimeEventRow(SQLModel, table=True):
     resolved: bool = False
 
 
+class PaymentLinkRow(SQLModel, table=True):
+    """Application-level idempotency for RazorpayClient's Payment Link writes. Razorpay's
+    Payment Links API has no idempotency-key header (unlike its Payouts/Refunds APIs) --
+    Sourced: no X-*-Idempotency support documented for /v1/payment_links as of this writing.
+    So invariant 6 ("retries reuse the same key") is enforced here instead: check this table
+    for `idempotency_key` before ever calling payment_link.create(), and reuse the stored
+    link rather than creating a second one.
+    """
+
+    idempotency_key: str = Field(primary_key=True)  # Attempt.idempotency_key
+    invoice_id: str
+    razorpay_payment_link_id: str
+    short_url: str
+    created_at: datetime
+
+
 class DeadLetterRow(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     event_id: str
@@ -130,6 +146,20 @@ class LiveStore:
     def list_downtime(self) -> list[DowntimeEventRow]:
         with Session(self._engine) as session:
             return list(session.exec(select(DowntimeEventRow)))
+
+    def get_payment_link(self, idempotency_key: str) -> PaymentLinkRow | None:
+        with Session(self._engine) as session:
+            return session.get(PaymentLinkRow, idempotency_key)
+
+    def record_payment_link(
+        self, idempotency_key: str, invoice_id: str, razorpay_payment_link_id: str, short_url: str, now: datetime
+    ) -> None:
+        with Session(self._engine) as session:
+            session.add(PaymentLinkRow(
+                idempotency_key=idempotency_key, invoice_id=invoice_id,
+                razorpay_payment_link_id=razorpay_payment_link_id, short_url=short_url, created_at=now,
+            ))
+            session.commit()
 
     def record_dead_letter(self, event_id: str, event_type: str, payload: dict[str, Any], error: str, now: datetime) -> None:
         with Session(self._engine) as session:
