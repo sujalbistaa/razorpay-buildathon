@@ -12,3 +12,9 @@ build/
 *.sqlite3
 .env
 benchmarks/models/
+
+# Internal build/process docs -- kept locally for reference, never pushed
+# (repo was still private when this was added; see git history for the
+# earlier commits that did include them).
+CLAUDE.md
+build-docs/
