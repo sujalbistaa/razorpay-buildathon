@@ -13,14 +13,15 @@ test:
 	$(VENV)/bin/pytest
 
 lint:
-	$(VENV)/bin/ruff check src tests
+	$(VENV)/bin/ruff check src tests scripts
 	$(VENV)/bin/mypy src/vasool
+	$(VENV)/bin/mypy scripts
 
 up:
 	@echo "not implemented"
 
 seed:
-	@echo "not implemented"
+	$(VENV)/bin/python scripts/seed.py
 
 bench:
 	@echo "not implemented"

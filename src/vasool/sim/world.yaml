@@ -1,0 +1,109 @@
+# sim/world.yaml — the causal generative world every policy arm is benchmarked against.
+#
+# Every parameter is marked SOURCED (a specific claim, URL-cited — see ASSUMPTIONS.md),
+# ESTIMATED (reasoned, no public source), or POLICY PARAMETER (a declared dial, not a claim
+# about the world at all — CLAUDE.md's honesty rule, same convention BUILD_DOC.md §3.3 sets).
+
+customer:
+  payday_dom:
+    # SOURCED: razorpay.com/blog/e-nach-upi-autopay-for-nbfcs-the-complete-collections-playbook-for-2026/
+    # "avoid the 25th-31st; align to the 3rd-7th" — read as a mixture: most salaries land near
+    # month-start, a smaller cluster near the 7th/10th, a smaller one on the last working day.
+    mixture:
+      - {weight: 0.60, kind: near_day, day: 1, spread_days: 2} # 1st +/- 2
+      - {weight: 0.25, kind: last_working_day}
+      - {weight: 0.15, kind: near_day, day: 7, spread_days: 3} # 7th/10th cluster
+
+  balance:
+    salary_inr:
+      # ESTIMATED: no public distribution of Indian recurring-payment customers' salaries.
+      # Lognormal centered near a plausible subscription-paying salary band.
+      distribution: lognormal
+      mean_log: 10.6 # median ~= e^10.6 =~ INR 40,100
+      sigma_log: 0.5
+    spend_rate:
+      # ESTIMATED: fraction of salary spent per day. Beta so most customers burn down
+      # steadily through the month rather than in one lump.
+      distribution: beta
+      alpha: 2.0
+      beta: 5.0
+    buffer_inr:
+      # ESTIMATED: what's left at the monthly trough. Exponential — most customers run
+      # close to empty, a minority keep a larger buffer.
+      distribution: exponential
+      scale: 800
+
+  card:
+    # ESTIMATED: no published distribution of card state across a recurring-payment base.
+    # Uses "expired" (not BUILD_DOC.md §3.1's "expiring_on") to match §3.3's resolution
+    # check `card.state == expired` — the two didn't agree in the source doc; see the
+    # Phase 3 report for the flagged inconsistency and this resolution.
+    state_probabilities: {valid: 0.90, expired: 0.03, blocked: 0.02, reissued: 0.05}
+
+  mandate:
+    rail_probabilities:
+      # SOURCED: razorpay.com/blog/e-nach-upi-autopay-for-nbfcs-... — UPI Autopay for
+      # <=15,000 (AFA-free, mobile-first), e-NACH for high-value/long-tenure.
+      upi_autopay: 0.65
+      enach: 0.30
+      card: 0.05
+    state_probabilities: {active: 0.94, paused: 0.03, revoked: 0.03} # ESTIMATED
+    max_amount_inr:
+      # ESTIMATED, but anchored to a SOURCED number: RBI E-mandate Framework 2026's
+      # AFA-free ceiling is 15,000 — centered so most customers' mandate cap sits at or
+      # above their typical invoice, matching how mandates are actually registered.
+      distribution: lognormal
+      mean_log: 9.6
+      sigma_log: 0.6
+
+  # ESTIMATED — no published Indian issuer market-share table used here; illustrative pool.
+  issuer_pool: [HDFC, ICICI, SBI, Axis, Kotak]
+
+  # ESTIMATED — no published language-mix source; skews Hindi/Hinglish-majority, consistent
+  # with BUILD_DOC.md §6's premise that most recovery messages aren't plain English.
+  language_probabilities: {en: 0.30, hi: 0.30, hinglish: 0.40}
+
+  engagement:
+    base_response_rate: {distribution: beta, alpha: 2.0, beta: 3.0} # ESTIMATED
+    fatigue_decay: 0.7 # ESTIMATED — multiplicative odds reduction per message already sent
+
+  # ESTIMATED — some customers have genuinely churned and are never recoverable regardless
+  # of retry strategy (BUILD_DOC.md §3.1's intent_to_pay).
+  intent_to_pay_rate: 0.92
+
+issuer_availability:
+  # SOURCED (event schema): razorpay.com/docs/api/payments/downtime/entity, BUILD_DOC.md §1.5.
+  # The arrival/duration process itself is ESTIMATED — no published downtime frequency.
+  downtime_arrivals_per_day: 0.15 # Poisson rate per issuer
+  duration_hours:
+    distribution: lognormal
+    mean_log: 1.0 # median ~= 2.7h
+    sigma_log: 0.8
+  # SOURCED (that a month-end congestion effect exists): BUILD_DOC.md §3.2, "that's when
+  # Indian recurring debit volume spikes". Multiplier magnitude is ESTIMATED.
+  month_end_congestion_multiplier: 2.5
+  month_end_days: [25, 26, 27, 28, 29, 30, 31]
+  severity_probabilities: {low: 0.50, medium: 0.35, high: 0.15} # ESTIMATED
+  # ESTIMATED — baseline approval odds once no blocking condition applies.
+  issuer_base_approval_rate: 0.85
+
+bank_side_limits:
+  # ESTIMATED — no published frequency for hitting a customer-bank velocity limit; modeled
+  # as an independent low-probability event per attempt, not something Vasool's own attempt
+  # history can predict (Z7, BUILD_DOC.md §1.2 — "velocity limit at customer bank").
+  velocity_exceeded_rate: 0.02
+
+invoice:
+  # ESTIMATED — no published Indian subscription-price distribution; illustrative range for
+  # recurring D2C/SaaS/insurance-style billing.
+  amount_inr: {distribution: lognormal, mean_log: 6.5, sigma_log: 0.6} # median ~= INR 665
+  category_probabilities: {standard: 0.80, insurance: 0.08, mutual_fund: 0.07, credit_card_bill: 0.05}
+
+planning_costs:
+  # ESTIMATED — BUILD_DOC.md §4.3: Indian transactional SMS runs roughly INR 0.12-0.25,
+  # WhatsApp utility messages a similar band. No vendor price list cited as a source.
+  notification_cost_paise: 20
+  # POLICY PARAMETER, NOT ESTIMATED — BUILD_DOC.md §4.3: encodes the merchant's tolerance
+  # for contacting customers. Has no empirical basis; swept across values in the Phase 8
+  # robustness run rather than presented as a measurement.
+  annoyance_cost_paise: 500

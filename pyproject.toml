@@ -20,6 +20,7 @@ dependencies = [
     "anthropic",
     "jinja2",
     "matplotlib",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,7 @@ dev = [
     "pytest",
     "mypy",
     "ruff",
+    "types-PyYAML",
 ]
 
 [tool.hatch.build.targets.wheel]

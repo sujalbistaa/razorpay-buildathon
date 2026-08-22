@@ -1,0 +1,134 @@
+"""generate_cohort — one seeded, reproducible batch: customers, invoices and the world they live in."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import numpy as np
+
+from vasool.domain.money import Money
+from vasool.domain.types import Invoice, InvoiceCategory
+from vasool.sim.world import (
+    CustomerGenerator,
+    IssuerAvailability,
+    LatentCustomer,
+    World,
+    load_world_config,
+)
+
+# Fixed reference instant for the simulated horizon — never datetime.now() (CLAUDE.md invariant 8).
+DEFAULT_HORIZON_START = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+@dataclass(frozen=True)
+class Cohort:
+    seed: int
+    horizon_start: datetime
+    horizon_days: int
+    customers: tuple[LatentCustomer, ...]
+    invoices: tuple[Invoice, ...]
+    world: World
+
+    def content_hash(self) -> str:
+        payload = {
+            "seed": self.seed,
+            "horizon_start": self.horizon_start.isoformat(),
+            "horizon_days": self.horizon_days,
+            "customers": [_customer_repr(c) for c in self.customers],
+            "invoices": [_invoice_repr(i) for i in self.invoices],
+        }
+        blob = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+    def split_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {"A": 0, "B": 0}
+        for customer in self.customers:
+            counts[customer.split] += 1
+        return counts
+
+
+def _customer_repr(customer: LatentCustomer) -> dict[str, object]:
+    raw = asdict(customer)
+    raw["salary"] = customer.salary.paise
+    raw["buffer"] = customer.buffer.paise
+    raw["mandate_max_amount"] = customer.mandate_max_amount.paise
+    return raw
+
+
+def _invoice_repr(invoice: Invoice) -> dict[str, object]:
+    return {
+        "invoice_id": invoice.invoice_id,
+        "customer_id": invoice.customer_id,
+        "amount_paise": invoice.amount.paise,
+        "category": invoice.category.value,
+        "first_failed_at": invoice.first_failed_at.isoformat(),
+    }
+
+
+def generate_cohort(
+    seed: int,
+    n_customers: int,
+    n_invoices: int,
+    horizon_days: int,
+    horizon_start: datetime = DEFAULT_HORIZON_START,
+) -> Cohort:
+    rng = np.random.default_rng(seed)
+    config = load_world_config()
+
+    generator = CustomerGenerator(config, rng)
+    customers = tuple(generator.generate(f"cust_{i:05d}") for i in range(n_customers))
+    customers_by_id = {c.customer_id: c for c in customers}
+
+    issuers = sorted({c.issuer for c in customers})
+    issuer_availability = IssuerAvailability(
+        config["issuer_availability"], issuers, horizon_start, horizon_days, rng
+    )
+    world = World(customers_by_id, issuer_availability, config, seed)
+
+    invoices = _generate_invoices(rng, customers, n_invoices, horizon_start, horizon_days, config)
+
+    return Cohort(
+        seed=seed,
+        horizon_start=horizon_start,
+        horizon_days=horizon_days,
+        customers=customers,
+        invoices=invoices,
+        world=world,
+    )
+
+
+def _generate_invoices(
+    rng: np.random.Generator,
+    customers: tuple[LatentCustomer, ...],
+    n_invoices: int,
+    horizon_start: datetime,
+    horizon_days: int,
+    config: dict[str, Any],
+) -> tuple[Invoice, ...]:
+    invoice_cfg = config["invoice"]
+    amount_cfg = invoice_cfg["amount_inr"]
+    category_probs = invoice_cfg["category_probabilities"]
+    category_keys = list(category_probs.keys())
+    category_weights = np.array([category_probs[k] for k in category_keys], dtype=float)
+    category_weights = category_weights / category_weights.sum()
+
+    invoices = []
+    for i in range(n_invoices):
+        customer = customers[int(rng.integers(0, len(customers)))]
+        amount_rupees = round(float(rng.lognormal(amount_cfg["mean_log"], amount_cfg["sigma_log"])), 2)
+        category = InvoiceCategory(category_keys[int(rng.choice(len(category_keys), p=category_weights))])
+        offset_days = float(rng.uniform(0, horizon_days))
+        invoices.append(
+            Invoice(
+                invoice_id=f"inv_{i:06d}",
+                customer_id=customer.customer_id,
+                amount=Money.from_rupees(amount_rupees),
+                category=category,
+                first_failed_at=horizon_start + timedelta(days=offset_days),
+            )
+        )
+    return tuple(invoices)
