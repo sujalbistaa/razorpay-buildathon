@@ -11,6 +11,7 @@ from vasool.domain.money import Money
 from vasool.domain.types import (
     ActionType,
     Attempt,
+    DowntimeWindow,
     FailureClass,
     Invoice,
     InvoiceCategory,
@@ -21,7 +22,6 @@ from vasool.domain.types import (
 from vasool.sim.world import (
     CardState,
     CustomerGenerator,
-    DowntimeWindow,
     IssuerAvailability,
     LatentCustomer,
     World,

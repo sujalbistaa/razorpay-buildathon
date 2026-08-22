@@ -42,5 +42,16 @@
     "messages_sent": 966,
     "recovery_rate": 0.1835,
     "total_recovered_paise": 23966090
+  },
+  {
+    "arm": "heuristic",
+    "attempts_per_recovery": 4.082251082251083,
+    "compliance_violations": 0,
+    "false_dunning_rate": 0.491,
+    "invoices": 2000,
+    "mean_days_to_recovery": 2.2876635139102324,
+    "messages_sent": 2000,
+    "recovery_rate": 0.462,
+    "total_recovered_paise": 66811866
   }
 ]

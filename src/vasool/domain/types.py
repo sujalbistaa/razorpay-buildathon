@@ -114,6 +114,22 @@ class StopRule(StrEnum):
     INVOICE_PAID = "invoice_paid"
 
 
+class DowntimeWindow(FrozenModel):
+    """https://razorpay.com/docs/api/payments/downtime/entity — payment.downtime.* shape.
+
+    Not sim-specific: sim/world.py generates these synthetically, execute/razorpay_client.py
+    (Phase 9) will read real ones from the same API. policy/downtime.py consumes either
+    without knowing which. Lives here, not in sim/, so policy/ never has to import sim/.
+    """
+
+    issuer: str
+    method: Rail
+    severity: Severity
+    begin: AwareDatetime
+    end: AwareDatetime
+    scheduled: bool = False
+
+
 class FailureEvent(FrozenModel):
     """The raw diagnose input — Razorpay's error object plus which invoice it happened on."""
 

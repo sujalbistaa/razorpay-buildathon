@@ -32,9 +32,18 @@ from vasool.compliance.rules import (
 from vasool.domain.money import Money
 from vasool.domain.taxonomy import DEFAULT_SOURCE
 from vasool.domain.timezones import ist_date
-from vasool.domain.types import ActionType, Attempt, Decision, FailureSource, Invoice, RecoveryPlan
+from vasool.domain.types import (
+    ActionType,
+    Attempt,
+    Decision,
+    FailureClass,
+    FailureSource,
+    Invoice,
+    RecoveryPlan,
+)
 from vasool.execute.protocol import AttemptOutcome, Executor
 from vasool.policy.base import Policy, PolicyContext
+from vasool.policy.payday import PaydayObservation
 from vasool.sim.cohort import Cohort
 
 # Not from a merchant record yet — Phase 8's dashboard/onboarding would supply this.
@@ -80,9 +89,31 @@ def _snapshot_hash(invoice: Invoice, context: RuleContext) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def _invoices_by_customer(cohort: Cohort) -> dict[str, list[Invoice]]:
+    index: dict[str, list[Invoice]] = {}
+    for invoice in cohort.invoices:
+        index.setdefault(invoice.customer_id, []).append(invoice)
+    return index
+
+
+def _payday_evidence_for(invoice: Invoice, siblings: list[Invoice], cohort: Cohort) -> tuple[PaydayObservation, ...]:
+    return tuple(
+        PaydayObservation(
+            day_of_month=ist_date(sibling.first_failed_at).day,
+            insufficient_funds=cohort.origin_failures[sibling.invoice_id] is FailureClass.INSUFFICIENT_FUNDS,
+        )
+        for sibling in siblings
+        if sibling.invoice_id != invoice.invoice_id
+    )
+
+
 def run_arm(policy: Policy, policy_version: str, cohort: Cohort, executor: Executor, audit_db_path: str) -> list[InvoiceRunResult]:
     audit = AuditLog(audit_db_path)
-    return [_run_invoice(policy, policy_version, invoice, cohort, executor, audit) for invoice in cohort.invoices]
+    by_customer = _invoices_by_customer(cohort)
+    return [
+        _run_invoice(policy, policy_version, invoice, cohort, executor, audit, by_customer[invoice.customer_id])
+        for invoice in cohort.invoices
+    ]
 
 
 def _run_invoice(
@@ -92,12 +123,19 @@ def _run_invoice(
     cohort: Cohort,
     executor: Executor,
     audit: AuditLog,
+    sibling_invoices: list[Invoice],
 ) -> InvoiceRunResult:
     customer = cohort.world.customer(invoice.customer_id)
     profile = customer.to_profile()
     failure_class = cohort.origin_failures[invoice.invoice_id]
 
-    plan_context = PolicyContext(customer=profile, failure_class=failure_class, now=invoice.first_failed_at)
+    plan_context = PolicyContext(
+        customer=profile,
+        failure_class=failure_class,
+        now=invoice.first_failed_at,
+        payday_evidence=_payday_evidence_for(invoice, sibling_invoices, cohort),
+        known_downtime_windows=cohort.world.downtime_windows_known_by(invoice.first_failed_at),
+    )
     plan = policy.plan(invoice, plan_context)
     ordered = sorted(plan.attempts, key=lambda a: a.debit_at or a.notify_at or invoice.first_failed_at)
 

@@ -37,6 +37,7 @@ from vasool.domain.types import (
     ActionType,
     Attempt,
     CustomerProfile,
+    DowntimeWindow,
     FailureClass,
     FailureEvent,
     Invoice,
@@ -211,16 +212,6 @@ def _clamp_to_month(year: int, month: int, day: int) -> date:
     return date(year, month, min(day, last_day))
 
 
-@dataclass(frozen=True)
-class DowntimeWindow:
-    issuer: str
-    method: Rail
-    severity: Severity
-    begin: datetime
-    end: datetime
-    scheduled: bool = False
-
-
 class IssuerAvailability:
     """Poisson-arrival downtime bursts, log-normal durations, month-end congestion multiplier.
 
@@ -309,6 +300,14 @@ class World:
 
     def is_issuer_down(self, issuer: str, method: Rail, t: datetime) -> bool:
         return self._issuer_availability.is_down(issuer, method, t)
+
+    def downtime_windows_known_by(self, t: datetime) -> tuple[DowntimeWindow, ...]:
+        """Windows a real payment.downtime.started webhook would have already fired for as
+        of `t` -- a future window isn't in this list, even if it exists in the schedule.
+        This is the only sanctioned way for policy code to learn about downtime; it must
+        never read IssuerAvailability directly.
+        """
+        return tuple(w for w in self._issuer_availability.windows if w.begin <= t)
 
     def snapshot(self) -> World:
         # Nothing here is mutated by attempt() — see the module docstring. A World is already
