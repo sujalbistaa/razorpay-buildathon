@@ -53,6 +53,17 @@ strict = true
 module = "vasool.compliance.*"
 strict = true
 
+[[tool.mypy.overrides]]
+# lightgbm ships no type stubs (and none on PyPI as of this writing).
+module = "lightgbm.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# pandas-stubs is a separate, large dev dependency for one DataFrame construction site in
+# hazard.py; ignoring missing imports here avoids adding it just for that.
+module = "pandas.*"
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]

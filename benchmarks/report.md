@@ -1,12 +1,22 @@
 # Benchmark report
 
-| arm | recovery rate | recovered | attempts/recovery | mean days | messages | false dunning | violations |
-|---|---|---|---|---|---|---|---|
-| no_retry | 0.0% | ₹0.00 | 0.00 | — | 0 | 0.0% | 0 |
-| razorpay_default | 17.9% | ₹236,427.79 | 4.91 | 1.0 | 897 | 50.1% | 0 |
-| static_1_3_7 | 24.6% | ₹329,955.97 | 7.37 | 2.0 | 1830 | 32.8% | 0 |
-| dunning_only | 18.4% | ₹239,660.90 | 2.63 | 0.0 | 966 | 48.4% | 0 |
-| heuristic | 46.2% | ₹668,118.66 | 4.08 | 2.3 | 2000 | 49.1% | 0 |
+| arm | invoices | recovery rate | recovered | attempts/recovery | mean days | messages | false dunning | violations |
+|---|---|---|---|---|---|---|---|---|
+| no_retry | 2000 | 0.0% | ₹0.00 | 0.00 | — | 0 | 0.0% | 0 |
+| razorpay_default | 2000 | 17.9% | ₹236,427.79 | 4.91 | 1.0 | 897 | 50.1% | 0 |
+| static_1_3_7 | 2000 | 24.6% | ₹329,955.97 | 7.37 | 2.0 | 1830 | 32.8% | 0 |
+| dunning_only | 2000 | 9.8% | ₹120,453.28 | 4.93 | 0.0 | 966 | 48.4% | 0 |
+| heuristic | 2000 | 46.2% | ₹668,118.66 | 4.08 | 2.3 | 2000 | 49.1% | 0 |
+| learned | 938 | 52.0% | ₹331,373.50 | 5.88 | 5.1 | 1499 | 40.3% | 0 |
+
+`invoices` differs across arms: baselines and `heuristic` run over the full 2,000-invoice cohort (A+B); `learned` is scored on held-out cohort B only (BUILD_PLAN.md Phase 6) -- its `recovered` total is not directly comparable to the other arms' totals for that reason, though `recovery rate` still is. See the paired, same-population comparison below.
+
+## Learned vs razorpay_default, held-out cohort B
+
+`learned` trains its hazard model on cohort A's exploration log only and is scored here exclusively on cohort B's 938 invoices, paired against `razorpay_default` run over the identical B invoices (same world, same seed).
+
+- Mean paired difference: **+₹234.57** per invoice (learned minus razorpay_default)
+- 95% bootstrap CI: [₹205.74, ₹264.25] (2000 resamples)
 
 ## Payday inference validation
 

@@ -21,16 +21,13 @@ import hashlib
 from datetime import date, datetime, timedelta
 from enum import StrEnum
 
-from vasool.compliance.constants import (
-    CONTACT_QUIET_HOURS_IST,
-    MAX_ATTEMPT_WINDOW_DAYS,
-    PRE_DEBIT_NOTICE_HOURS,
-)
-from vasool.domain.timezones import IST, ist_date, to_ist
+from vasool.compliance.constants import MAX_ATTEMPT_WINDOW_DAYS, PRE_DEBIT_NOTICE_HOURS
+from vasool.domain.timezones import at_hour_ist, ist_date
 from vasool.domain.types import ActionType, Attempt, FailureClass, Invoice, RecoveryPlan, StopRule
 from vasool.policy.base import PolicyContext
 from vasool.policy.downtime import DowntimeTracker
 from vasool.policy.payday import PaydayPosterior, next_occurrence
+from vasool.policy.timing import avoid_quiet_hours
 
 PRE_DEBIT_LEAD = timedelta(hours=PRE_DEBIT_NOTICE_HOURS)
 FALLBACK_DAYS_OUT = 3  # matches BUILD_DOC.md §4.2's UNKNOWN row: "one retry at T+3"
@@ -75,19 +72,6 @@ ACTION_TABLE: dict[FailureClass, HeuristicAction] = {
     FailureClass.DEBIT_INSTRUMENT_INACTIVE: HeuristicAction.RETRY_T3_THEN_CONTACT,
     FailureClass.MANDATE_PAUSED: HeuristicAction.RETRY_T3_THEN_CONTACT,
 }
-
-
-def _at_hour_ist(d: date, hour: int) -> datetime:
-    return datetime(d.year, d.month, d.day, hour, tzinfo=IST)
-
-
-def _avoid_quiet_hours(t: datetime) -> datetime:
-    quiet_start, quiet_end = CONTACT_QUIET_HOURS_IST
-    ist_t = to_ist(t)
-    if quiet_end <= ist_t.hour < quiet_start:
-        return t
-    target_date = ist_t.date() if ist_t.hour < quiet_end else ist_t.date() + timedelta(days=1)
-    return _at_hour_ist(target_date, quiet_end)
 
 
 def _jitter_hours(invoice_id: str, max_hours: float) -> float:
@@ -157,7 +141,7 @@ def _plan_silent_retry_at_payday(invoice: Invoice, context: PolicyContext) -> Re
     today = ist_date(context.now)
     posterior = PaydayPosterior.infer(context.payday_evidence)
     debit_date = _closest_day_within_window(posterior.map_estimate(), today, MAX_ATTEMPT_WINDOW_DAYS)
-    debit_at = _at_hour_ist(debit_date, 10)
+    debit_at = at_hour_ist(debit_date, 10)
     attempts = _notice_and_debit(invoice, context, debit_at)
     return RecoveryPlan(invoice_id=invoice.invoice_id, attempts=attempts)
 
@@ -167,21 +151,21 @@ def _plan_silent_retry_on_downtime_resolved(invoice: Invoice, context: PolicyCon
     resolution = tracker.expected_resolution(context.customer.issuer, context.customer.mandate_rail, context.now)
     if resolution is not None:
         jittered = resolution + timedelta(hours=_jitter_hours(invoice.invoice_id, max_hours=2.0))
-        debit_at = _avoid_quiet_hours(jittered)
+        debit_at = avoid_quiet_hours(jittered)
     else:
-        debit_at = _at_hour_ist(ist_date(context.now) + timedelta(days=1), 10)
+        debit_at = at_hour_ist(ist_date(context.now) + timedelta(days=1), 10)
     attempts = _notice_and_debit(invoice, context, debit_at)
     return RecoveryPlan(invoice_id=invoice.invoice_id, attempts=attempts)
 
 
 def _plan_silent_retry_next_day(invoice: Invoice, context: PolicyContext) -> RecoveryPlan:
-    debit_at = _at_hour_ist(ist_date(context.now) + timedelta(days=1), 10)
+    debit_at = at_hour_ist(ist_date(context.now) + timedelta(days=1), 10)
     attempts = _notice_and_debit(invoice, context, debit_at)
     return RecoveryPlan(invoice_id=invoice.invoice_id, attempts=attempts)
 
 
 def _plan_contact_immediately(invoice: Invoice, context: PolicyContext) -> RecoveryPlan:
-    send_at = _avoid_quiet_hours(context.now)
+    send_at = avoid_quiet_hours(context.now)
     attempt = Attempt(
         invoice_id=invoice.invoice_id,
         attempt_index=0,
@@ -195,7 +179,7 @@ def _plan_contact_immediately(invoice: Invoice, context: PolicyContext) -> Recov
 
 
 def _plan_credential_update_then_stop(invoice: Invoice, context: PolicyContext) -> RecoveryPlan:
-    send_at = _avoid_quiet_hours(context.now)
+    send_at = avoid_quiet_hours(context.now)
     attempt = Attempt(
         invoice_id=invoice.invoice_id,
         attempt_index=0,
@@ -213,9 +197,9 @@ def _plan_stop_never_retry(invoice: Invoice, context: PolicyContext) -> Recovery
 
 
 def _plan_retry_t3_then_contact(invoice: Invoice, context: PolicyContext) -> RecoveryPlan:
-    debit_at = _at_hour_ist(ist_date(context.now) + timedelta(days=FALLBACK_DAYS_OUT), 10)
+    debit_at = at_hour_ist(ist_date(context.now) + timedelta(days=FALLBACK_DAYS_OUT), 10)
     notice, retry = _notice_and_debit(invoice, context, debit_at)
-    contact_at = _avoid_quiet_hours(debit_at + timedelta(days=2))  # >=48h after `notice` -- R010
+    contact_at = avoid_quiet_hours(debit_at + timedelta(days=2))  # >=48h after `notice` -- R010
     contact = Attempt(
         invoice_id=invoice.invoice_id,
         attempt_index=2,
@@ -228,7 +212,10 @@ def _plan_retry_t3_then_contact(invoice: Invoice, context: PolicyContext) -> Rec
     return RecoveryPlan(invoice_id=invoice.invoice_id, attempts=(notice, retry, contact))
 
 
-_BRANCHES = {
+# Not underscore-prefixed: bench/ablation.py builds partial action tables (e.g. every soft
+# class routed to RETRY_T3_THEN_CONTACT, to measure what payday/downtime awareness are worth
+# on their own) and needs these branch functions directly rather than duplicating them.
+BRANCHES = {
     HeuristicAction.SILENT_RETRY_AT_PAYDAY: _plan_silent_retry_at_payday,
     HeuristicAction.SILENT_RETRY_ON_DOWNTIME_RESOLVED: _plan_silent_retry_on_downtime_resolved,
     HeuristicAction.SILENT_RETRY_NEXT_DAY: _plan_silent_retry_next_day,
@@ -240,6 +227,14 @@ _BRANCHES = {
 
 
 class HeuristicPolicy:
+    """`action_table` defaults to the full BUILD_DOC.md §4.2 table; bench/ablation.py passes
+    a restricted table to measure what a single capability (e.g. payday-aware timing) is
+    worth relative to the RETRY_T3_THEN_CONTACT fallback every class would otherwise get.
+    """
+
+    def __init__(self, action_table: dict[FailureClass, HeuristicAction] | None = None) -> None:
+        self._action_table = action_table if action_table is not None else ACTION_TABLE
+
     def plan(self, invoice: Invoice, context: PolicyContext) -> RecoveryPlan:
-        action = ACTION_TABLE[context.failure_class]
-        return _BRANCHES[action](invoice, context)
+        action = self._action_table[context.failure_class]
+        return BRANCHES[action](invoice, context)

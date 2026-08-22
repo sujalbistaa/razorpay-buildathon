@@ -43,16 +43,23 @@ def write_results_json(metrics: list[ArmMetrics], path: Path) -> None:
 
 
 def write_report_md(metrics: list[ArmMetrics], path: Path) -> None:
-    header = "| arm | recovery rate | recovered | attempts/recovery | mean days | messages | false dunning | violations |"
-    sep = "|---|---|---|---|---|---|---|---|"
+    header = "| arm | invoices | recovery rate | recovered | attempts/recovery | mean days | messages | false dunning | violations |"
+    sep = "|---|---|---|---|---|---|---|---|---|"
     rows = []
     for m in metrics:
         mean_days = f"{m.mean_days_to_recovery:.1f}" if m.mean_days_to_recovery is not None else "—"
         rows.append(
-            f"| {m.arm} | {m.recovery_rate:.1%} | {m.total_recovered.format_inr()} | "
+            f"| {m.arm} | {m.invoices} | {m.recovery_rate:.1%} | {m.total_recovered.format_inr()} | "
             f"{m.attempts_per_recovery:.2f} | {mean_days} | {m.messages_sent} | "
             f"{m.false_dunning_rate:.1%} | {m.compliance_violations} |"
         )
-    content = "# Benchmark report\n\n" + "\n".join([header, sep, *rows]) + "\n"
+    note = (
+        "\n`invoices` differs across arms: baselines and `heuristic` run over the full "
+        "2,000-invoice cohort (A+B); `learned` is scored on held-out cohort B only "
+        "(BUILD_PLAN.md Phase 6) -- its `recovered` total is not directly comparable to the "
+        "other arms' totals for that reason, though `recovery rate` still is. See the "
+        "paired, same-population comparison below.\n"
+    )
+    content = "# Benchmark report\n\n" + "\n".join([header, sep, *rows]) + "\n" + note
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)

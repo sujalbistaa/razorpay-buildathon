@@ -20,3 +20,7 @@ def ist_date(dt: datetime) -> date:
 
 def day_of_month_ist(dt: datetime) -> int:
     return to_ist(dt).day
+
+
+def at_hour_ist(d: date, hour: int) -> datetime:
+    return datetime(d.year, d.month, d.day, hour, tzinfo=IST)

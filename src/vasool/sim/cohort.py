@@ -96,9 +96,14 @@ def generate_cohort(
     n_invoices: int,
     horizon_days: int,
     horizon_start: datetime = DEFAULT_HORIZON_START,
+    config: dict[str, Any] | None = None,
 ) -> Cohort:
+    # `config` defaults to disk (world.yaml) but bench/robustness.py passes a perturbed copy
+    # in-memory -- BUILD_PLAN.md Phase 6's "re-run with world parameters perturbed +/-30-50%"
+    # needs a cohort built from a modified config without writing a second YAML file to disk.
+    if config is None:
+        config = load_world_config()
     rng = np.random.default_rng(seed)
-    config = load_world_config()
 
     generator = CustomerGenerator(config, rng)
     customers = tuple(generator.generate(f"cust_{i:05d}") for i in range(n_customers))

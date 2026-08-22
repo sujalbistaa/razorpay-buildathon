@@ -34,14 +34,14 @@
   },
   {
     "arm": "dunning_only",
-    "attempts_per_recovery": 2.6321525885558583,
+    "attempts_per_recovery": 4.928571428571429,
     "compliance_violations": 0,
     "false_dunning_rate": 0.484472049689441,
     "invoices": 2000,
     "mean_days_to_recovery": 0.0,
     "messages_sent": 966,
-    "recovery_rate": 0.1835,
-    "total_recovered_paise": 23966090
+    "recovery_rate": 0.098,
+    "total_recovered_paise": 12045328
   },
   {
     "arm": "heuristic",
@@ -53,5 +53,16 @@
     "messages_sent": 2000,
     "recovery_rate": 0.462,
     "total_recovered_paise": 66811866
+  },
+  {
+    "arm": "learned",
+    "attempts_per_recovery": 5.879098360655738,
+    "compliance_violations": 0,
+    "false_dunning_rate": 0.4029352901934623,
+    "invoices": 938,
+    "mean_days_to_recovery": 5.055547666180983,
+    "messages_sent": 1499,
+    "recovery_rate": 0.5202558635394456,
+    "total_recovered_paise": 33137350
   }
 ]

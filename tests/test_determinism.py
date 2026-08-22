@@ -1,5 +1,7 @@
 """Same seed, same world.yaml, same results, byte for byte — CLAUDE.md invariant 8."""
 
+from vasool.bench.exploration import generate_exploration_log
+from vasool.policy.hazard import HazardModel
 from vasool.sim.cohort import generate_cohort
 
 SEED = 42
@@ -33,6 +35,20 @@ def test_split_is_roughly_50_50_and_stable_across_runs() -> None:
     # "roughly" — not exactly 50/50, but neither half should be a rounding error from the other.
     assert 0.4 <= counts["A"] / total <= 0.6
     assert first.split_counts() == second.split_counts()
+
+
+def test_exploration_log_is_identical_across_runs_with_the_same_seed() -> None:
+    # Thompson sampling (policy/explore.py) draws from an np.random.Generator seeded here,
+    # not from a shared/unseeded source -- the log it produces, and the model trained from
+    # it, must come out byte-identical across two independent runs.
+    small = generate_cohort(seed=SEED, n_customers=40, n_invoices=120, horizon_days=60)
+    log_a = generate_exploration_log(small, seed=SEED)
+    log_b = generate_exploration_log(small, seed=SEED)
+    assert [(e.features, e.success) for e in log_a] == [(e.features, e.success) for e in log_b]
+
+    model_a = HazardModel.train(log_a)
+    model_b = HazardModel.train(log_b)
+    assert model_a.predict(log_a[0].features) == model_b.predict(log_b[0].features)
 
 
 def test_split_assignment_is_independent_of_what_else_consumed_the_rng() -> None:
