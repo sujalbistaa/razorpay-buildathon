@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vasool"
+version = "0.1.0"
+description = "Autonomous recovery agent for failed recurring payments in India."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi",
+    "pydantic>=2",
+    "sqlmodel",
+    "apscheduler",
+    "lightgbm",
+    "numpy",
+    "pandas",
+    "structlog",
+    "httpx",
+    "anthropic",
+    "jinja2",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "mypy",
+    "ruff",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vasool"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "vasool.domain.*"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "vasool.policy.*"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "vasool.compliance.*"
+strict = true
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
