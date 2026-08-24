@@ -1,11 +1,11 @@
 """BUILD_PLAN.md Phase 7 accept: with the LLM client raising on every call, the full
 benchmark still runs and produces the same recovery numbers.
 
-Uses a real LLMClient with its underlying anthropic.Anthropic calls monkeypatched to raise --
-not a fake object standing in for LLMClient -- so this actually exercises LLMClient's own
-"never raises to callers" contract (client.py), not just a test double's behavior. No network
-call and no real API key are needed: constructing anthropic.Anthropic() doesn't touch the
-network, only messages.create()/.parse() would.
+Uses a real LLMClient with its underlying httpx.Client calls monkeypatched to raise -- not a
+fake object standing in for LLMClient -- so this actually exercises LLMClient's own "never
+raises to callers" contract (client.py), not just a test double's behavior. No network call
+and no real API key are needed: constructing httpx.Client() doesn't touch the network, only
+.post() would.
 
 The honest reason the benchmark numbers hold either way: diagnose/rules.py classifies every
 event the simulator can produce (sim/world.py's _fail_outcome always sets `reason` to a
@@ -16,7 +16,7 @@ from matching totals.
 
 from __future__ import annotations
 
-import anthropic
+import httpx
 import pytest
 
 from vasool.bench.harness import run_arm
@@ -38,20 +38,25 @@ HORIZON_DAYS = 30
 
 @pytest.fixture
 def raising_llm_client(monkeypatch: pytest.MonkeyPatch) -> LLMClient:
-    """A real LLMClient, in real ("anthropic") mode, whose SDK calls always raise -- the
-    actual failure shape BUILD_PLAN.md Phase 7 means by "the LLM client raising on every
-    call," as opposed to a client that was simply never wired up (stub mode).
+    """A real LLMClient, in real ("live") mode, whose HTTP calls always raise on *both*
+    providers -- the actual failure shape BUILD_PLAN.md Phase 7 means by "the LLM client
+    raising on every call," as opposed to a client that was simply never wired up (stub mode).
+    Both, not just Groq: LLMClient falls back from Groq to Gemini on any failure, so leaving
+    Gemini alive would silently absorb it and this fixture would no longer test what its name
+    says it does.
     """
-    monkeypatch.setenv("VASOOL_LLM", "anthropic")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-fake-key-for-testing")
+    monkeypatch.setenv("VASOOL_LLM", "live")
+    monkeypatch.setenv("GROQ_API_KEY", "fake-key-for-testing")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key-for-testing")
     client = LLMClient()
-    assert client._client is not None  # confirms it's actually in "anthropic" mode, not stub
+    assert client._groq is not None  # confirms it's actually in "live" mode, not stub
+    assert client._gemini is not None
 
     def _raise(*args: object, **kwargs: object) -> None:
-        raise anthropic.APIConnectionError(request=None)  # type: ignore[arg-type]
+        raise httpx.ConnectError("simulated failure")
 
-    monkeypatch.setattr(client._client.messages, "create", _raise)
-    monkeypatch.setattr(client._client.messages, "parse", _raise)
+    monkeypatch.setattr(client._groq, "post", _raise)
+    monkeypatch.setattr(client._gemini, "post", _raise)
     return client
 
 

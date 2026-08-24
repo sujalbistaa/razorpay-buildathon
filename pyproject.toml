@@ -17,7 +17,6 @@ dependencies = [
     "pandas",
     "structlog",
     "httpx",
-    "anthropic",
     "jinja2",
     "matplotlib",
     "pyyaml",

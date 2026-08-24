@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import anthropic
+import httpx
 
 from vasool.api.store import LiveStore
 from vasool.api.webhooks import _process_event
@@ -65,14 +65,18 @@ class ScenarioResult:
 
 
 def _raising_llm_client() -> LLMClient:
-    """A real LLMClient, in "anthropic" mode, whose SDK calls always raise -- same shape
-    tests/test_llm_fallback.py uses. No real API key or network call: constructing
-    anthropic.Anthropic() doesn't touch the network, only messages.create()/.parse() would,
-    and those are monkeypatched below to raise before ever doing so.
+    """A real LLMClient, in "live" mode, whose HTTP calls always raise on *both* providers --
+    same shape tests/test_llm_fallback.py uses. Both, not just the primary (Groq): LLMClient
+    falls back from Groq to Gemini on any failure, so a scenario that only breaks Groq would
+    silently pass through Gemini and prove nothing about the deterministic fallback this
+    scenario exists to verify. No real API keys or network calls: constructing httpx.Client()
+    doesn't touch the network, only .post() would, and that's monkeypatched below to raise
+    before ever doing so.
     """
     previous_mode = os.environ.get("VASOOL_LLM")
-    os.environ["VASOOL_LLM"] = "anthropic"
-    os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-fake-key-for-chaos")
+    os.environ["VASOOL_LLM"] = "live"
+    os.environ.setdefault("GROQ_API_KEY", "fake-key-for-chaos")
+    os.environ.setdefault("GEMINI_API_KEY", "fake-key-for-chaos")
     try:
         client = LLMClient()
     finally:
@@ -80,13 +84,14 @@ def _raising_llm_client() -> LLMClient:
             os.environ.pop("VASOOL_LLM", None)
         else:
             os.environ["VASOOL_LLM"] = previous_mode
-    assert client._client is not None
+    assert client._groq is not None
+    assert client._gemini is not None
 
     def _raise(*args: object, **kwargs: object) -> None:
-        raise anthropic.APIConnectionError(request=None)  # type: ignore[arg-type]
+        raise httpx.ConnectError("simulated failure")
 
-    client._client.messages.create = _raise  # type: ignore[assignment]
-    client._client.messages.parse = _raise  # type: ignore[assignment]
+    client._groq.post = _raise  # type: ignore[assignment]
+    client._gemini.post = _raise  # type: ignore[assignment]
     return client
 
 

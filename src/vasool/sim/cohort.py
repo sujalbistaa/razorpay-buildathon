@@ -107,7 +107,7 @@ def generate_cohort(
     if config is None:
         config = load_world_config()
     # `llm_client` defaults to VASOOL_LLM's own default (stub, deterministic, no network) --
-    # invariant 8 holds as long as the caller doesn't opt into VASOOL_LLM=anthropic, at which
+    # invariant 8 holds as long as the caller doesn't opt into VASOOL_LLM=live, at which
     # point cohort generation inherits whatever nondeterminism a live LLM call carries, same
     # as any other opt-in use of the real API.
     if llm_client is None:
