@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "hypothesis",
     "mypy",
     "ruff",
     "types-PyYAML",
