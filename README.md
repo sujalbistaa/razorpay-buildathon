@@ -4,8 +4,9 @@
 
 <br><br>
 
+<a href="https://github.com/sujalbistaa/razorpay-buildathon/actions/workflows/ci.yml"><img src="https://github.com/sujalbistaa/razorpay-buildathon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 <img src="https://img.shields.io/badge/python-3.11-146b45?style=flat-square&labelColor=1c1b17" alt="python 3.11">
-<img src="https://img.shields.io/badge/tests-310_passing-146b45?style=flat-square&labelColor=1c1b17" alt="310 tests passing">
+<img src="https://img.shields.io/badge/tests-324_passing-146b45?style=flat-square&labelColor=1c1b17" alt="324 tests passing">
 <img src="https://img.shields.io/badge/compliance_violations-0-146b45?style=flat-square&labelColor=1c1b17" alt="zero compliance violations">
 <img src="https://img.shields.io/badge/mypy-strict-146b45?style=flat-square&labelColor=1c1b17" alt="mypy strict">
 <img src="https://img.shields.io/badge/docker_compose_up-77s_cold-146b45?style=flat-square&labelColor=1c1b17" alt="docker compose up in 77 seconds">
@@ -97,7 +98,11 @@ flowchart LR
 ```
 
 Full detail — the `Executor` Protocol trick that makes the benchmark honest, every compliance
-rule, and how the audit trail is structured — is in [ARCHITECTURE.md](ARCHITECTURE.md).
+rule, and how the audit trail is structured — is in [ARCHITECTURE.md](ARCHITECTURE.md). Why
+each of those choices won over its alternative — SQLite not Postgres, `Protocol` not
+inheritance, Thompson sampling not epsilon-greedy, Groq-then-Gemini, no Celery/Redis — is in
+[DESIGN_DECISIONS.md](DESIGN_DECISIONS.md). Six real bugs hit while building this, each one
+symptom → root cause → fix, are in [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
 
 Click any invoice on the dashboard and the decision inspector shows the *entire* reasoning
 chain behind one decision — not a summary of it:
@@ -128,6 +133,40 @@ cohort so there's a full reasoning chain to click through immediately, alongside
 
 <br>
 
+## Watch it fail on purpose
+
+<img src="docs/assets/chaos.gif" alt="make chaos — 7 fault-injection scenarios: LLM down, corrupt model artefact, Razorpay 5xx, circuit breaker trip, duplicate webhook, poisoned queue message, issuer downtime backlog — 7/7 passed" width="100%">
+
+`make chaos` — real code paths, not a mock: an LLM client forced to raise mid-call, a
+genuinely corrupted LightGBM model file, a Razorpay client made to return 5xx until the
+circuit breaker trips, the same webhook event ID delivered twice, a malformed queue message.
+Every scenario asserts the system degraded the way CLAUDE.md says it must — a `degraded` flag
+set, a fallback taken, never a crash, never a silently wrong number — not just that it didn't
+throw. The dashboard's fault-injection panel (`/#chaos-panel`) runs the same LLM/model/Razorpay
+toggles live, from the browser, against the running process.
+
+<br>
+
+## Webhook ingestion latency, measured
+
+The one externally-facing endpoint (`POST /webhooks/razorpay`) has a documented latency claim
+in its own module docstring — "ack within 200ms, enqueue." `make load` (`scripts/load_test.py`)
+checks that against a real running instance rather than leaving it asserted: its own
+subprocess, its own scratch SQLite file, 500 individually-HMAC-signed requests at concurrency
+50 over real loopback TCP, torn down after. Measured on the machine this was built on:
+
+| Metric | Value |
+|---|---|
+| Requests | 500, concurrency 50, 0 non-200 |
+| p50 | 66.32 ms |
+| p95 | 87.74 ms |
+| p99 | 91.95 ms |
+| max | 94.27 ms |
+
+Run `make load` yourself — this isn't a number to take on faith, and it'll vary by machine.
+
+<br>
+
 ## Where we deliberately did not use an LLM
 
 The LLM never decides timing, probability, retry eligibility, or anything that touches money
@@ -135,7 +174,7 @@ arithmetic. The boundary is drawn once and held everywhere:
 
 <img src="docs/assets/llm_boundary.png" alt="Never: retry timing, P(success), hard-decline eligibility, money arithmetic, compliance approval. Always with a fallback: unmapped-error classification, message drafting, policy compilation, batch narrative, decision explanation." width="100%">
 
-Anthropic unavailable → rules and templates, logged, `degraded: llm` on the dashboard,
+Groq/Gemini unavailable → rules and templates, logged, `degraded: llm` on the dashboard,
 `make bench` produces the identical number either way (`tests/test_llm_fallback.py` proves
 this directly, not just by matching totals).
 
@@ -171,7 +210,7 @@ this directly, not just by matching totals).
 
 ```
 revora/
-├── README.md, ARCHITECTURE.md, ASSUMPTIONS.md
+├── README.md, ARCHITECTURE.md, ASSUMPTIONS.md, ENGINEERING_LOG.md, DESIGN_DECISIONS.md
 ├── docker-compose.yml, Dockerfile, Makefile, pyproject.toml, .env.example
 ├── src/vasool/         Python package name predates the Revora rebrand; unchanged internally
 │   ├── domain/        types, enums, Money (int paise), FailureClass, Attempt, RecoveryPlan
@@ -184,10 +223,12 @@ revora/
 │   ├── sim/              causal generative world, world.yaml, cohort generation
 │   ├── bench/            harness, metrics, ablation, robustness sweep, plots
 │   ├── api/              webhooks, dashboard, decision inspector, admin DLQ
-│   ├── llm/              Anthropic client (stub-mode fallback), narrative, policy compiler
+│   ├── llm/              Groq client with a Gemini fallback (stub-mode too), narrative, policy compiler
 │   └── chaos.py          `make chaos` — 7 fault-injection scenarios
-├── scripts/              seed.py, bench.py, live_demo.py
-├── tests/                310 tests, including test_compliance_invariants.py
+├── scripts/              seed.py, bench.py, live_demo.py, load_test.py
+├── tests/                324 tests: table-driven compliance cases, hypothesis property tests
+│                         (hundreds of randomized inputs per run against 4 rules), determinism,
+│                         idempotency, and test_compliance_invariants.py
 └── benchmarks/            results.json, report.md, robustness.md, plots — committed deliberately
 ```
 
@@ -201,8 +242,9 @@ revora/
 ```
 make install     # creates .venv, installs the pinned toolchain
 make bench       # regenerates benchmarks/results.json, report.md, the plots above (~90s)
-make test        # 310 tests, ~13s, includes test_compliance_invariants.py
+make test        # 324 tests, ~13s, includes test_compliance_invariants.py
 make chaos       # 7 fault-injection scenarios against the real code paths above (~2s)
+make load        # p50/p99 webhook ingestion latency against a real running instance (~5s)
 ```
 
 `benchmarks/results.json` and the report PNGs are committed deliberately — you see the number
