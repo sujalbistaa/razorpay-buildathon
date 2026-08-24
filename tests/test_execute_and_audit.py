@@ -124,5 +124,7 @@ def test_audit_log_record_decision_and_outcome_are_append_only() -> None:
 
 def test_audit_log_has_no_update_method() -> None:
     # Structural guarantee, not just convention: nothing on this class can mutate a row.
+    # sample_decision is a read-only SELECT (api/dashboard.py's "real audit row" panel) --
+    # allowed here because it can't write, only record_decision/record_outcome can.
     public_methods = {name for name in dir(AuditLog) if not name.startswith("_")}
-    assert public_methods == {"record_decision", "record_outcome"}
+    assert public_methods == {"record_decision", "record_outcome", "sample_decision"}

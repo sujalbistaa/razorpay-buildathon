@@ -2,16 +2,17 @@
 {% block title %}Revora — Dashboard{% endblock %}
 {% block content %}
 
-<div class="flex flex-wrap items-start justify-between gap-4 mb-10 pb-8 border-b border-line">
+<div class="flex flex-wrap items-start justify-between gap-4 mb-6 pb-8 border-b border-line">
     <div>
         <h1 class="font-display text-4xl font-semibold tracking-tight">Recovery dashboard</h1>
         <p class="text-sm text-ink-muted mt-2">policy version <span class="font-mono text-ink">{{ policy_version }}</span></p>
     </div>
     <div class="flex gap-2 flex-wrap">
-        {% set llm_ok = not degraded.llm %}
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] label {{ 'border-accent/30 bg-accent-soft text-accent-strong' if llm_ok else 'border-warn/30 bg-warn/10 text-warn' }}">
-            <span class="w-1.5 h-1.5 rounded-full {{ 'bg-accent' if llm_ok else 'bg-warn' }}"></span>
-            LLM {{ 'live' if llm_ok else 'stub' }}
+        {% set llm_class = 'border-bad/30 bg-bad/10 text-bad' if llm_status == 'forced_down' else ('border-accent/30 bg-accent-soft text-accent-strong' if llm_status == 'live' else 'border-warn/30 bg-warn/10 text-warn') %}
+        {% set llm_dot = 'bg-bad' if llm_status == 'forced_down' else ('bg-accent' if llm_status == 'live' else 'bg-warn') %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] label {{ llm_class }}">
+            <span class="w-1.5 h-1.5 rounded-full {{ llm_dot }}"></span>
+            LLM {{ 'forced down' if llm_status == 'forced_down' else llm_status }}
         </span>
         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] label {{ 'border-warn/30 bg-warn/10 text-warn' if degraded.model else 'border-accent/30 bg-accent-soft text-accent-strong' }}">
             <span class="w-1.5 h-1.5 rounded-full {{ 'bg-warn' if degraded.model else 'bg-accent' }}"></span>
@@ -23,6 +24,205 @@
         </span>
     </div>
 </div>
+
+<div class="mb-10">
+    <p class="text-base text-ink-muted max-w-3xl leading-relaxed">
+        When a recurring payment fails in India — a card declined, an e-NACH mandate paused, a UPI Autopay debit blocked — <span class="text-ink font-medium">this agent decides whether, when, and how to retry it</span>, inside limits set by RBI/NPCI, and writes down why for every single decision.
+    </p>
+    <div class="mt-6 border border-line rounded bg-card">
+        <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
+            <p class="label text-[10px] text-ink-faint">Compliance rules run before every attempt — <span class="text-ink-muted">6 of 15 shown</span></p>
+            <p class="label text-[10px] text-ink-faint">source: <span class="font-mono normal-case tracking-normal">compliance/rules.py</span> + <span class="font-mono normal-case tracking-normal">constants.py</span></p>
+        </div>
+        <div class="divide-y divide-line/70">
+            <div class="px-5 py-3 flex items-baseline gap-4">
+                <span class="font-mono text-[11px] text-accent-strong w-52 shrink-0">R001_PRE_DEBIT_NOTICE</span>
+                <span class="text-[13px] text-ink flex-1 min-w-[220px]">&ge;24h notice before any recurring debit</span>
+                <span class="text-[11px] text-ink-faint font-mono shrink-0">RBI/DPSS/2026-27/396 &middot; 21 Apr 2026</span>
+            </div>
+            <div class="px-5 py-3 flex items-baseline gap-4">
+                <span class="font-mono text-[11px] text-accent-strong w-52 shrink-0">R002_AFA_THRESHOLD</span>
+                <span class="text-[13px] text-ink flex-1 min-w-[220px]">&#8377;15,000 AFA-free ceiling (&#8377;1,00,000 for insurance / mutual funds / credit-card bills)</span>
+                <span class="text-[11px] text-ink-faint font-mono shrink-0">RBI/DPSS/2026-27/396</span>
+            </div>
+            <div class="px-5 py-3 flex items-baseline gap-4">
+                <span class="font-mono text-[11px] text-accent-strong w-52 shrink-0">R003_MAX_SILENT_ATTEMPTS</span>
+                <span class="text-[13px] text-ink flex-1 min-w-[220px]">max 4 silent retries before the customer must be notified</span>
+                <span class="text-[11px] text-ink-faint font-mono shrink-0">razorpay.com/docs/&hellip;/payment-retries</span>
+            </div>
+            <div class="px-5 py-3 flex items-baseline gap-4">
+                <span class="font-mono text-[11px] text-accent-strong w-52 shrink-0">R005_MIN_INTERVAL_SAME_PATH</span>
+                <span class="text-[13px] text-ink flex-1 min-w-[220px]">&ge;24h between two attempts on the same rail — no retry storms</span>
+                <span class="text-[11px] text-ink-faint font-mono shrink-0">industry guidance, not Razorpay-published</span>
+            </div>
+            <div class="px-5 py-3 flex items-baseline gap-4">
+                <span class="font-mono text-[11px] text-accent-strong w-52 shrink-0">R009_CONTACT_QUIET_HOURS</span>
+                <span class="text-[13px] text-ink flex-1 min-w-[220px]">no customer contact 9pm&ndash;9am IST</span>
+                <span class="text-[11px] text-ink-faint font-mono shrink-0">internal policy &mdash; no regulatory source</span>
+            </div>
+            <div class="px-5 py-3 flex items-baseline gap-4">
+                <span class="font-mono text-[11px] text-accent-strong w-52 shrink-0">R010_MESSAGE_FREQUENCY</span>
+                <span class="text-[13px] text-ink flex-1 min-w-[220px]">max 3 messages per invoice, &ge;48h apart</span>
+                <span class="text-[11px] text-ink-faint font-mono shrink-0">internal policy &mdash; bounds customer annoyance</span>
+            </div>
+        </div>
+        <div class="px-5 py-2.5 border-t border-line">
+            <p class="text-[11px] text-ink-faint">We didn't mark everything "regulation" — the ones without a citation are our own policy calls, disclosed as such. Full list and sourcing in <span class="font-mono">ASSUMPTIONS.md</span>.</p>
+        </div>
+    </div>
+</div>
+
+<div id="policy-panel" class="border-2 border-accent/30 rounded-lg bg-card mb-10 overflow-hidden">
+    <div class="px-6 py-4 border-b border-accent/20 bg-accent-soft/60">
+        <p class="label text-[12px] text-accent-strong">Draft a policy in plain English</p>
+        <p class="text-[13px] text-ink-muted mt-1.5 max-w-2xl leading-relaxed">Invariant 2's third permitted LLM use: it drafts a rule, it never activates one. There's no code path from here to a live decision — approving below only proves the confirmation gate exists, it doesn't rewire the benchmark above.</p>
+    </div>
+    <div class="p-6">
+        <form method="post" action="/demo/policy/compile" class="flex gap-3 flex-wrap" onsubmit="const b=this.querySelector('button');b.disabled=true;b.innerHTML='<span class=&quot;spinner&quot;></span> thinking&hellip;';">
+            <input type="text" name="nl_text" placeholder="e.g. don't retry anything under &#8377;100 more than twice" class="flex-1 min-w-[320px] px-4 py-3 rounded border border-line bg-paper text-[15px] font-mono text-ink placeholder:text-ink-faint focus:outline-none focus:border-accent/50">
+            <button type="submit" class="px-6 py-3 rounded border border-ink bg-ink text-paper text-[13px] label hover:bg-ink/85 transition-colors flex items-center gap-2">compile</button>
+        </form>
+
+        {% if demo_policy_fallback_reason %}
+        <p class="text-[13px] text-warn mt-4">LLM unavailable ({{ demo_policy_fallback_reason }}) — refused to guess. There's no deterministic fallback for policy compilation; unlike a customer message, there's no safe template for "what did this arbitrary sentence mean as a rule." Refusing is correct here, not a gap.</p>
+        {% endif %}
+
+        {% if demo_policy_rule %}
+        <div class="mt-5 pt-5 border-t border-line">
+            <p class="label text-[11px] text-ink-faint mb-3">Compiled rule — not active until approved</p>
+            {% if demo_policy_diff %}
+            <div class="space-y-2 mb-5 font-mono text-[15px]">
+                {% for d in demo_policy_diff %}
+                <p class="text-ink"><span class="text-ink-faint">{{ d.field }}</span>: {{ d.current }} <span class="text-ink-faint">&rarr;</span> <span class="text-accent-strong font-semibold">{{ d.proposed }}</span></p>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-[13px] text-ink-faint mb-5">Compiled to the platform default — nothing this instruction said moved either field.</p>
+            {% endif %}
+            {% if demo_policy_activated %}
+            <p class="text-[13px] text-accent-strong">Activated with <span class="font-mono">confirmed=True</span>, logged. (Demo only — no live decision path reads this.)</p>
+            {% else %}
+            <div class="flex gap-2">
+                <form method="post" action="/demo/policy/approve"><button type="submit" class="px-4 py-2 rounded border border-accent/30 bg-accent-soft text-accent-strong hover:bg-accent hover:text-paper transition-colors text-[12px] label">approve &amp; activate</button></form>
+                <form method="post" action="/demo/policy/discard"><button type="submit" class="px-4 py-2 rounded border border-line bg-paper text-ink-muted hover:border-bad/40 hover:text-bad transition-colors text-[12px] label">discard</button></form>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div id="chaos-panel" class="border border-line rounded bg-card mb-10">
+    <div class="px-5 py-3 border-b border-line flex items-start justify-between flex-wrap gap-3">
+        <div>
+            <p class="label text-[10px] text-ink-faint">Fault injection — this is live, not a recording</p>
+            <p class="text-[12px] text-ink-faint mt-1 max-w-xl">Each button below drives the exact code path <span class="font-mono">make chaos</span> already verifies from a terminal — against this server's real state. Click one and watch the badges up top change for real.</p>
+        </div>
+        {% if demo_chaos.llm or demo_chaos.model or demo_chaos.razorpay %}
+        <form method="post" action="/demo/chaos/reset">
+            <button type="submit" class="px-3 py-1.5 rounded border border-line bg-card text-ink-muted hover:border-accent/40 hover:text-accent-strong transition-colors text-[11px] label shrink-0">reset all</button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="divide-y divide-line/70">
+        <div class="px-5 py-3.5 flex items-center gap-4 flex-wrap">
+            <div class="flex-1 min-w-[240px]">
+                <p class="text-[13px] text-ink font-medium">Kill the LLM</p>
+                <p class="text-[12px] text-ink-faint mt-0.5">Forces both real HTTP clients (Groq, the fallback Gemini) to raise on every call. Classification and messaging genuinely fall back to rules and templates — nothing crashes.</p>
+            </div>
+            <form method="post" action="/demo/chaos/llm">
+                <button type="submit" class="px-3.5 py-1.5 rounded border text-[11px] label transition-colors shrink-0 {{ 'border-bad/30 bg-bad/10 text-bad hover:bg-bad/20' if demo_chaos.llm else 'border-line bg-paper text-ink-muted hover:border-accent/40 hover:text-accent-strong' }}">{{ 'restore' if demo_chaos.llm else 'break it' }}</button>
+            </form>
+        </div>
+        <div class="px-5 py-3.5 flex items-center gap-4 flex-wrap">
+            <div class="flex-1 min-w-[240px]">
+                <p class="text-[13px] text-ink font-medium">Corrupt the hazard model</p>
+                <p class="text-[12px] text-ink-faint mt-0.5">Loads a genuinely unreadable file through the real <span class="font-mono">HazardModel.load()</span>. <span class="font-mono">LearnedPolicy.degraded</span> flips to true for real; <span class="font-mono">HeuristicPolicy</span> takes over.</p>
+            </div>
+            <form method="post" action="/demo/chaos/model">
+                <button type="submit" class="px-3.5 py-1.5 rounded border text-[11px] label transition-colors shrink-0 {{ 'border-bad/30 bg-bad/10 text-bad hover:bg-bad/20' if demo_chaos.model else 'border-line bg-paper text-ink-muted hover:border-accent/40 hover:text-accent-strong' }}">{{ 'restore' if demo_chaos.model else 'break it' }}</button>
+            </form>
+        </div>
+        <div class="px-5 py-3.5 flex items-center gap-4 flex-wrap">
+            <div class="flex-1 min-w-[240px]">
+                <p class="text-[13px] text-ink font-medium">Trip the Razorpay circuit breaker</p>
+                <p class="text-[12px] text-ink-faint mt-0.5">Runs {{ max_consecutive_failures }} real calls through a client wired to always fail. The breaker opens for real; the next call fails fast with zero network calls.</p>
+            </div>
+            <form method="post" action="/demo/chaos/razorpay">
+                <button type="submit" class="px-3.5 py-1.5 rounded border text-[11px] label transition-colors shrink-0 {{ 'border-bad/30 bg-bad/10 text-bad hover:bg-bad/20' if demo_chaos.razorpay else 'border-line bg-paper text-ink-muted hover:border-accent/40 hover:text-accent-strong' }}">{{ 'restore' if demo_chaos.razorpay else 'break it' }}</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="bg-card border border-line rounded p-5 mb-10">
+    <h2 class="label text-[11px] text-ink-faint mb-1">What happened to the seeded cohort</h2>
+    <p class="text-[12px] text-ink-faint mb-6">{{ recovery_waterfall.failed }} invoices failed. This is the actual path each one took — not a projection.</p>
+    <div class="flex items-start gap-1 sm:gap-4">
+        <div class="flex-1 text-center">
+            <p class="font-mono text-3xl font-semibold tracking-tight">{{ recovery_waterfall.failed }}</p>
+            <p class="label text-[10px] text-ink-faint mt-2">Failed</p>
+            <div class="mt-2 h-1 rounded-full bg-line overflow-hidden"><div class="h-full bg-ink-faint" style="width: 100%"></div></div>
+        </div>
+        <div class="flex items-center text-ink-faint text-lg pt-2">&rarr;</div>
+        <div class="flex-1 text-center">
+            <p class="font-mono text-3xl font-semibold tracking-tight">{{ recovery_waterfall.attempted }}</p>
+            <p class="label text-[10px] text-ink-faint mt-2">Attempted</p>
+            <div class="mt-2 h-1 rounded-full bg-line overflow-hidden"><div class="h-full bg-ink-faint" style="width: {{ (recovery_waterfall.attempted / recovery_waterfall.failed * 100) if recovery_waterfall.failed else 0 }}%"></div></div>
+        </div>
+        <div class="flex items-center text-ink-faint text-lg pt-2">&rarr;</div>
+        <div class="flex-1 text-center">
+            <p class="font-mono text-3xl font-semibold tracking-tight text-accent-strong">{{ recovery_waterfall.recovered }}</p>
+            <p class="label text-[10px] text-ink-faint mt-2">Recovered</p>
+            <div class="mt-2 h-1 rounded-full bg-line overflow-hidden"><div class="h-full bg-accent" style="width: {{ (recovery_waterfall.recovered / recovery_waterfall.failed * 100) if recovery_waterfall.failed else 0 }}%"></div></div>
+        </div>
+        <div class="flex items-center text-ink-faint text-lg pt-2">&rarr;</div>
+        <div class="flex-1 text-center">
+            <p class="font-mono text-3xl font-semibold tracking-tight">{{ recovery_waterfall.still_at_risk }}</p>
+            <p class="label text-[10px] text-ink-faint mt-2">Still at risk</p>
+            <div class="mt-2 h-1 rounded-full bg-line overflow-hidden"><div class="h-full bg-warn" style="width: {{ (recovery_waterfall.still_at_risk / recovery_waterfall.failed * 100) if recovery_waterfall.failed else 0 }}%"></div></div>
+        </div>
+    </div>
+    <p class="text-[12px] text-ink-faint mt-6 text-center border-t border-line pt-4">{{ recovery_waterfall.recovered_inr }} recovered from this cohort alone</p>
+</div>
+
+{% if money_on_the_table %}
+<div class="border border-line rounded bg-ink text-paper p-6 mb-10 text-center">
+    <p class="label text-[10px] text-paper/60">Same {{ money_on_the_table.invoices }} invoices, doing nothing vs. doing this</p>
+    <p class="font-mono text-4xl font-semibold tracking-tight mt-3">{{ money_on_the_table.delta_inr }}</p>
+    <p class="text-[13px] text-paper/70 mt-2">would have been lost for good — {{ money_on_the_table.baseline_inr }} recovered doing nothing, {{ money_on_the_table.ours_inr }} recovered running this policy, same cohort, same benchmark run.</p>
+</div>
+{% endif %}
+
+{% if sample_audit_row %}
+<div id="audit-row" class="bg-card border border-line rounded p-5 mb-10">
+    <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
+        <h2 class="label text-[11px] text-ink-faint">This is a real audit row</h2>
+        <form method="post" action="/demo/explain">
+            <button type="submit" class="px-3 py-1.5 rounded border border-line bg-paper text-ink-muted hover:border-accent/40 hover:text-accent-strong transition-colors text-[11px] label">explain it in english &rarr;</button>
+        </form>
+    </div>
+    <p class="text-[12px] text-ink-faint mb-4">Not a mockup — pulled live, right now, from the same append-only table every decision writes to before it executes. No row here is ever edited or deleted.</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-4 font-mono text-[12px]">
+        <div><p class="label text-[10px] text-ink-faint mb-1">invoice</p><p class="text-ink">{{ sample_audit_row.invoice_id }}</p></div>
+        <div><p class="label text-[10px] text-ink-faint mb-1">attempt</p><p class="text-ink">#{{ sample_audit_row.attempt_index }}</p></div>
+        <div><p class="label text-[10px] text-ink-faint mb-1">chosen action</p><p class="text-ink">{{ sample_audit_row.chosen_action }}</p></div>
+        <div><p class="label text-[10px] text-ink-faint mb-1">compliance</p><p class="{{ 'text-accent-strong' if sample_audit_row.compliance_approved else 'text-bad' }}">{{ 'approved' if sample_audit_row.compliance_approved else 'rejected' }}</p></div>
+        <div><p class="label text-[10px] text-ink-faint mb-1">expected value</p><p class="text-ink">{{ sample_audit_row.expected_value_inr }}</p></div>
+        <div><p class="label text-[10px] text-ink-faint mb-1">policy version</p><p class="text-ink">{{ sample_audit_row.policy_version }}</p></div>
+        <div class="col-span-2"><p class="label text-[10px] text-ink-faint mb-1">input snapshot hash (sha256)</p><p class="text-ink break-all">{{ sample_audit_row.input_snapshot_hash }}</p></div>
+    </div>
+    {% if explanation %}
+    <div class="mt-4 pt-4 border-t border-line">
+        <p class="label text-[10px] text-ink-faint mb-1.5">{{ 'LLM said' if llm_status == 'live' else 'deterministic fallback said' }} ({{ llm_status }})</p>
+        <p class="text-[13px] text-ink italic">&ldquo;{{ explanation }}&rdquo;</p>
+        {% if llm_status == 'live' %}
+        <p class="text-[11px] text-ink-faint mt-1.5">Capped at one factual sentence, no speculation — that restraint is the invariant, not a limitation.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
     <div class="bg-card border border-line rounded p-5">
@@ -41,11 +241,13 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-10">
     <div class="bg-card border border-line rounded p-5">
-        <h2 class="label text-[11px] text-ink-faint mb-4">Recovery rate by failure class</h2>
+        <h2 class="label text-[11px] text-ink-faint mb-1">Recovery rate by failure class</h2>
+        <p class="text-[12px] text-ink-faint mb-4">Not every failure is retryable — a blocked card recovers if reissued, a revoked mandate never does. This is where the money actually comes back from.</p>
         <canvas id="recoveryByClassChart" height="220"></canvas>
     </div>
     <div class="bg-card border border-line rounded p-5">
-        <h2 class="label text-[11px] text-ink-faint mb-4">Head-to-head benchmark</h2>
+        <h2 class="label text-[11px] text-ink-faint mb-1">Head-to-head benchmark</h2>
+        <p class="text-[12px] text-ink-faint mb-4">Same seeded cohort, five strategies. Grey = naive baselines (no retry, Razorpay's own T+1/T+2/T+3 schedule, a fixed 1/3/7-day cadence, message-only dunning). Green = ours.</p>
         <canvas id="benchmarkChart" height="220"></canvas>
     </div>
 </div>

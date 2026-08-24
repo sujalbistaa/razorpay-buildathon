@@ -13,7 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from vasool.api import admin, dashboard, inspector, webhooks
+from vasool.api import admin, chaos_demo, dashboard, inspector, policy_demo, webhooks
 from vasool.api.seed import build_seed_data
 from vasool.api.store import LiveStore
 from vasool.execute.razorpay_client import RazorpayClient
@@ -42,6 +42,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.razorpay_client = (
         RazorpayClient(key_id, key_secret, app.state.live_store) if key_id and key_secret else None
     )
+
+    # Live fault-injection demo (api/chaos_demo.py) -- layered on top of real state, never
+    # replacing it, so the seeded benchmark numbers and real razorpay_client stay untouched.
+    app.state.demo_chaos_llm_forced = False
+    app.state.demo_chaos_model_forced = False
+    app.state.demo_chaos_razorpay_client = None
+    app.state.demo_last_explanation = None
+    app.state.demo_policy_rule = None
+    app.state.demo_policy_fallback_reason = None
+    app.state.demo_policy_activated = False
     yield
 
 
@@ -51,3 +61,5 @@ app.include_router(dashboard.router)
 app.include_router(inspector.router)
 app.include_router(webhooks.router)
 app.include_router(admin.router)
+app.include_router(chaos_demo.router)
+app.include_router(policy_demo.router)

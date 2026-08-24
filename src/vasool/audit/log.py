@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlmodel import Field, Session, SQLModel, create_engine
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from vasool.domain.types import Decision
 
@@ -58,6 +58,13 @@ class AuditLog:
         with Session(self._engine) as session:
             session.add(row)
             session.commit()
+
+    def sample_decision(self) -> DecisionRow | None:
+        """One real row, for api/dashboard.py's "this is a real audit row" panel -- read-only,
+        never used by anything that affects a decision itself.
+        """
+        with Session(self._engine) as session:
+            return session.exec(select(DecisionRow).order_by(DecisionRow.id.desc())).first()  # type: ignore[union-attr]
 
     def record_outcome(
         self,

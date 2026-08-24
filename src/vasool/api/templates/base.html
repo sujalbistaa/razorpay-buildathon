@@ -38,6 +38,12 @@
     <style>
         body { font-feature-settings: "tnum" 1; }
         .label { font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+        .spinner {
+            display: inline-block; width: 13px; height: 13px; border-radius: 999px;
+            border: 2px solid currentColor; border-top-color: transparent;
+            animation: spin 0.7s linear infinite; vertical-align: -2px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-paper text-ink font-sans min-h-screen flex flex-col antialiased">

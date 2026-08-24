@@ -9,6 +9,8 @@ demo the reasoning chain quickly at server startup, not to produce a benchmark n
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
 
 from vasool.bench.exploration import generate_exploration_log
@@ -35,6 +37,7 @@ class SeedData:
     policy_version: str
     results_by_invoice: dict[str, InvoiceRunResult]
     degraded_model: bool
+    audit_db_path: str
 
 
 def build_seed_data() -> SeedData:
@@ -55,10 +58,16 @@ def build_seed_data() -> SeedData:
         policy_version = "heuristic:seed"
 
     executor = SimulatorClient(cohort.world)
-    results = run_arm(policy, policy_version, cohort, executor, ":memory:")
+    # A real file, not ":memory:" -- api/dashboard.py reads a real row back out of this after
+    # the process that wrote it (this function) has returned, which an in-memory sqlite
+    # connection wouldn't survive.
+    fd, audit_db_path = tempfile.mkstemp(suffix=".db", prefix="vasool_seed_audit_")
+    os.close(fd)
+    results = run_arm(policy, policy_version, cohort, executor, audit_db_path)
     degraded = isinstance(policy, LearnedPolicy) and policy.degraded
 
     return SeedData(
         cohort=cohort, policy=policy, policy_version=policy_version,
         results_by_invoice={r.invoice_id: r for r in results}, degraded_model=degraded,
+        audit_db_path=audit_db_path,
     )
