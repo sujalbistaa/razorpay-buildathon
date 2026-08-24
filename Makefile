@@ -2,7 +2,17 @@ VENV := .venv
 PYTHON := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
 
-.PHONY: install test lint up seed bench chaos live
+# Optional: a fresh clone has no .env (gitignored, only .env.example is committed) and every
+# target below still works with none -- stub LLM, no live Razorpay client, SQLite defaults.
+# When .env does exist, load it into every recipe's environment automatically so `make up`
+# actually picks up VASOOL_LLM=live without a manual `source .env` first -- forgetting that
+# step is what silently serves stub mode with no error, three separate times now.
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
+.PHONY: install test lint up seed bench chaos live load
 
 install:
 	python3.11 -m venv $(VENV)
@@ -31,3 +41,6 @@ chaos:
 
 live:
 	$(VENV)/bin/python scripts/live_demo.py
+
+load:
+	$(VENV)/bin/python scripts/load_test.py
