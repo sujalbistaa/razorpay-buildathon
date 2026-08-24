@@ -7,7 +7,7 @@ services:
       # A fresh clone has no .env (it's gitignored -- only .env.example is committed) and
       # the app runs fine with none: stub LLM, no live Razorpay client, SQLite defaults.
       # required: false means `docker compose up` doesn't fail on a clean checkout; an
-      # operator who copies .env.example -> .env for real Anthropic/Razorpay keys still
+      # operator who copies .env.example -> .env for real Groq/Gemini/Razorpay keys still
       # gets it picked up automatically.
       - path: .env
         required: false
