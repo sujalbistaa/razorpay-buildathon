@@ -11,7 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -23,6 +23,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
 RESULTS_JSON_PATH = REPO_ROOT / "benchmarks" / "results.json"
+QUEUE_PAGE_SIZE = 10
 
 
 def _load_benchmark_results() -> list[dict[str, Any]]:
@@ -48,7 +49,7 @@ def _recovery_by_class(seed: SeedData) -> list[dict[str, Any]]:
 
 
 @router.get("/", response_class=HTMLResponse)
-def dashboard(request: Request) -> HTMLResponse:
+def dashboard(request: Request, page: int = Query(default=1, ge=1)) -> HTMLResponse:
     seed: SeedData = request.app.state.seed_data
     store = request.app.state.live_store
 
@@ -77,6 +78,21 @@ def dashboard(request: Request) -> HTMLResponse:
         if not (seed.results_by_invoice.get(inv.invoice_id) and seed.results_by_invoice[inv.invoice_id].recovered)
     ) + sum(row.amount_paise for row in store.list_open_invoices())
 
+    total_pages = max(1, -(-len(at_risk_invoices) // QUEUE_PAGE_SIZE))
+    page = min(page, total_pages)
+    start = (page - 1) * QUEUE_PAGE_SIZE
+    queue_context = {
+        "at_risk_invoices": at_risk_invoices[start : start + QUEUE_PAGE_SIZE],
+        "at_risk_page": page,
+        "at_risk_total_pages": total_pages,
+    }
+
+    # HTMX requests only the queue table + pagination controls swap, not the whole page --
+    # keeps state in the URL (hx-push-url) rather than client-side JS, per the server-rendered
+    # dashboard rule in CLAUDE.md.
+    if request.headers.get("hx-request") == "true":
+        return templates.TemplateResponse(request, "_at_risk_queue.html", queue_context)
+
     razorpay_client = request.app.state.razorpay_client
     degraded = {
         "llm": is_stub_mode(),
@@ -89,7 +105,7 @@ def dashboard(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "dashboard.html",
         {
-            "at_risk_invoices": at_risk_invoices[:50],
+            **queue_context,
             "at_risk_count": len(at_risk_invoices),
             "at_risk_total_inr": f"₹{at_risk_total_paise / 100:,.2f}",
             "recovery_by_class": _recovery_by_class(seed),

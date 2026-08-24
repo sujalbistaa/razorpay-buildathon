@@ -1,0 +1,61 @@
+<div id="at-risk-queue">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left border-b border-line">
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Invoice</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Customer</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Amount</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Failure class</th>
+                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Source</th>
+                    <th class="py-2 pr-4"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in at_risk_invoices %}
+                <tr class="border-b border-line/70 hover:bg-accent-soft/40 transition-colors">
+                    <td class="py-2.5 pr-4 font-mono text-[13px]">{{ inv.invoice_id }}</td>
+                    <td class="py-2.5 pr-4 font-mono text-[13px] text-ink-muted">{{ inv.customer_id }}</td>
+                    <td class="py-2.5 pr-4 font-mono text-[13px]">{{ inv.amount_inr }}</td>
+                    <td class="py-2.5 pr-4">{{ inv.failure_class }}</td>
+                    <td class="py-2.5 pr-4">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] label {{ 'bg-accent-soft text-accent-strong' if inv.source == 'live' else 'bg-paper text-ink-faint border border-line' }}">{{ inv.source }}</span>
+                    </td>
+                    <td class="py-2.5 pr-4">
+                        {% if inv.source == 'seed' %}
+                        <a href="/inspector/{{ inv.invoice_id }}" class="text-accent hover:text-accent-strong hover:underline text-xs font-medium">inspect →</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="py-6 text-ink-faint text-sm">Nothing at risk right now.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="flex items-center justify-between mt-5 pt-4 border-t border-line">
+        <p class="label text-[11px] text-ink-muted">Page <span class="text-ink font-semibold">{{ at_risk_page }}</span> of {{ at_risk_total_pages }}</p>
+        <div class="flex items-center gap-1.5">
+            {% if at_risk_page > 1 %}
+            <button hx-get="/?page={{ at_risk_page - 1 }}" hx-target="#at-risk-queue" hx-swap="outerHTML" hx-push-url="true"
+                class="px-3 py-1.5 rounded border border-line bg-card text-ink-muted hover:border-accent/40 hover:text-accent-strong transition-colors text-[12px] label">prev</button>
+            {% else %}
+            <span class="px-3 py-1.5 rounded border border-line/60 text-ink-faint/50 text-[12px] label cursor-not-allowed">prev</span>
+            {% endif %}
+            {% for p in range(1, at_risk_total_pages + 1) %}
+                {% if p == at_risk_page %}
+                <span class="w-8 h-8 flex items-center justify-center rounded border border-accent bg-accent text-paper text-[13px] font-mono font-semibold">{{ p }}</span>
+                {% else %}
+                <button hx-get="/?page={{ p }}" hx-target="#at-risk-queue" hx-swap="outerHTML" hx-push-url="true"
+                    class="w-8 h-8 flex items-center justify-center rounded border border-line bg-card text-ink-muted hover:border-accent/40 hover:text-accent-strong transition-colors text-[13px] font-mono">{{ p }}</button>
+                {% endif %}
+            {% endfor %}
+            {% if at_risk_page < at_risk_total_pages %}
+            <button hx-get="/?page={{ at_risk_page + 1 }}" hx-target="#at-risk-queue" hx-swap="outerHTML" hx-push-url="true"
+                class="px-3 py-1.5 rounded border border-line bg-card text-ink-muted hover:border-accent/40 hover:text-accent-strong transition-colors text-[12px] label">next</button>
+            {% else %}
+            <span class="px-3 py-1.5 rounded border border-line/60 text-ink-faint/50 text-[12px] label cursor-not-allowed">next</span>
+            {% endif %}
+        </div>
+    </div>
+</div>

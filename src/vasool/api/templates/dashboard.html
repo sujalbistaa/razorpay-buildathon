@@ -52,40 +52,7 @@
 
 <div class="bg-card border border-line rounded p-5 mb-10">
     <h2 class="label text-[11px] text-ink-faint mb-4">At-risk queue</h2>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="text-left border-b border-line">
-                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Invoice</th>
-                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Customer</th>
-                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Amount</th>
-                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Failure class</th>
-                    <th class="py-2 pr-4 label text-[10px] text-ink-faint font-medium">Source</th>
-                    <th class="py-2 pr-4"></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for inv in at_risk_invoices %}
-                <tr class="border-b border-line/70 hover:bg-accent-soft/40 transition-colors">
-                    <td class="py-2.5 pr-4 font-mono text-[13px]">{{ inv.invoice_id }}</td>
-                    <td class="py-2.5 pr-4 font-mono text-[13px] text-ink-muted">{{ inv.customer_id }}</td>
-                    <td class="py-2.5 pr-4 font-mono text-[13px]">{{ inv.amount_inr }}</td>
-                    <td class="py-2.5 pr-4">{{ inv.failure_class }}</td>
-                    <td class="py-2.5 pr-4">
-                        <span class="px-1.5 py-0.5 rounded text-[10px] label {{ 'bg-accent-soft text-accent-strong' if inv.source == 'live' else 'bg-paper text-ink-faint border border-line' }}">{{ inv.source }}</span>
-                    </td>
-                    <td class="py-2.5 pr-4">
-                        {% if inv.source == 'seed' %}
-                        <a href="/inspector/{{ inv.invoice_id }}" class="text-accent hover:text-accent-strong hover:underline text-xs font-medium">inspect →</a>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="6" class="py-6 text-ink-faint text-sm">Nothing at risk right now.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    {% include "_at_risk_queue.html" %}
 </div>
 
 {% if downtime_windows %}
