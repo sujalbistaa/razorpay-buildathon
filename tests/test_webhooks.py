@@ -14,7 +14,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import threading
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -103,6 +105,36 @@ def test_duplicate_delivery_causes_exactly_one_state_transition(client: TestClie
     open_invoices = store.list_open_invoices()
     assert len(open_invoices) == 1
     assert store.get_invoice("pay_3") is not None
+
+
+def test_concurrent_duplicate_delivery_causes_exactly_one_success(store: LiveStore) -> None:
+    """The test above only ever delivers the duplicate sequentially -- two client.post() calls
+    in a row -- which a naive SELECT-then-INSERT would also pass. LiveStore.try_record_event's
+    own docstring claims it's "race-safe against two concurrent deliveries of the same
+    webhook" because dedup is a UNIQUE constraint, not a read-then-write check; this proves
+    that claim under an actual race (real OS threads released simultaneously via a Barrier,
+    against a real SQLite-backed LiveStore) instead of leaving it asserted only in prose.
+    """
+    n_threads = 20
+    barrier = threading.Barrier(n_threads)
+    results: list[bool] = []
+    results_lock = threading.Lock()
+
+    def _attempt() -> None:
+        barrier.wait()
+        result = store.try_record_event("evt_race", "payment.failed", {"payment_id": "pay_race"}, datetime.now(UTC))
+        with results_lock:
+            results.append(result)
+
+    threads = [threading.Thread(target=_attempt) for _ in range(n_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(results) == n_threads
+    assert results.count(True) == 1
+    assert results.count(False) == n_threads - 1
 
 
 def test_processing_failure_lands_in_dead_letter_queue_not_dropped_or_crashed(client: TestClient, store: LiveStore) -> None:
