@@ -1,9 +1,9 @@
 # Architecture
 
 Revora turns a failed recurring payment into a bounded, auditable, RBI-compliant recovery
-attempt. This document is the flow, the `Executor` Protocol trick that makes the benchmark
-honest, the compliance guard, and the audit trail — the four things worth understanding before
-reading the code.
+attempt. This document covers four things I think are worth understanding before you read the
+code: the flow, the `Executor` Protocol trick that keeps the benchmark honest, the compliance
+guard, and the audit trail.
 
 ## The flow
 
@@ -21,28 +21,30 @@ flowchart TD
     M -.-> C
 ```
 
-Diagnose classifies *why* the payment failed. Rules first (`diagnose/rules.py` — every error
-code the simulator or Razorpay itself can produce maps deterministically); the LLM
-(`diagnose/llm_fallback.py`) only ever sees a string that didn't match, and its output is
-constrained to the `FailureClass` enum plus a confidence score — a low-confidence or failed
-classification becomes `UNKNOWN`, never a guess presented as certainty.
+Diagnose figures out *why* the payment actually failed. Rules go first
+(`diagnose/rules.py` — every error code the simulator or Razorpay itself can produce maps
+deterministically); the LLM (`diagnose/llm_fallback.py`) only ever sees a string that didn't
+match anything, and its output is constrained to the `FailureClass` enum plus a confidence
+score. A low-confidence or failed classification becomes `UNKNOWN` — never a guess dressed up
+as certainty.
 
-Policy decides *whether, when, and on which rail* to retry, producing a `RecoveryPlan` — a
+Policy decides *whether, when, and on which rail* to retry, and produces a `RecoveryPlan`: a
 bounded sequence of `Attempt`s plus a `StopRule`. Three implementations share one `Policy`
-Protocol (`policy/base.py`): `HeuristicPolicy` (payday-aware, downtime-gated, rule-table
-driven), `LearnedPolicy` (a LightGBM hazard model estimates `P(success | t, class, context)`
-and an EV planner picks the slot that maximizes expected recovery minus contact cost), and four
-baselines (`policy/baselines.py`) standing in for what merchants actually run today —
-`razorpay_default` mirrors Razorpay's documented subscription retry schedule.
+Protocol (`policy/base.py`) — `HeuristicPolicy` (payday-aware, downtime-gated, driven off a
+rule table), `LearnedPolicy` (a LightGBM hazard model estimates
+`P(success | t, class, context)`, and an EV planner picks whichever slot maximizes expected
+recovery minus contact cost), and four baselines (`policy/baselines.py`) standing in for what
+merchants actually run today — `razorpay_default` mirrors Razorpay's documented subscription
+retry schedule.
 
-Compliance is the one hard gate every money action and every customer message passes through,
-covered in detail below.
+Compliance is the one hard gate every money action and every customer message has to pass
+through — covered in detail below.
 
-Executor is the one place a decision touches the outside world — described below.
+Executor is the only place a decision ever touches the outside world — also below.
 
 Audit writes one append-only row *before* the action executes, then a second row for the
-outcome once it's known. Nothing here is ever updated or deleted; `audit/log.py`'s
-`AuditLog` class has no `update_decision` method, on purpose.
+outcome once that's known. Nothing here ever gets updated or deleted — `audit/log.py`'s
+`AuditLog` class simply has no `update_decision` method. That's deliberate, not an oversight.
 
 ## The Executor Protocol trick
 
@@ -52,48 +54,49 @@ class Executor(Protocol):
     def execute(self, invoice: Invoice, attempt: Attempt, t: datetime, idempotency_key: str) -> AttemptOutcome: ...
 ```
 
-Two implementations, one Protocol, and the policy layer genuinely cannot tell them apart:
+There are two implementations behind one Protocol, and the policy layer genuinely can't tell
+them apart:
 
 - **`SimulatorClient`** (`execute/simulator_client.py`) resolves an attempt against a causal
   generative world (`sim/world.py`) — latent customer balance, mandate state, issuer
   availability — none of which the policy layer ever sees directly. This is what `make bench`
   runs against, 2,000 invoices at a time.
 - **`RazorpayClient`** (`execute/razorpay_client.py`) resolves the same call against real
-  Razorpay test-mode APIs. `CONTACT_LINK` creates a real Payment Link; `SILENT_RETRY` fetches
-  the payment's real status, since there is no merchant-callable API to force a mandate retry —
-  e-NACH and UPI Autopay retries run on Razorpay's own schedule, and `RazorpayClient` is honest
-  about that limit rather than pretending otherwise.
+  Razorpay test-mode APIs. `CONTACT_LINK` creates a real Payment Link; `SILENT_RETRY` just
+  fetches the payment's real status, because there's no merchant-callable API to force a
+  mandate retry — e-NACH and UPI Autopay retries run on Razorpay's own schedule, and
+  `RazorpayClient` is honest about that limit rather than pretending otherwise.
 
-This is why the benchmark is honest: the same `HeuristicPolicy`/`LearnedPolicy` code that
-decides against the simulator is the code that would decide against the real API. There is no
-separate "demo mode" branch anywhere in `policy/`.
+This is why the benchmark is actually honest: the same `HeuristicPolicy` / `LearnedPolicy`
+code deciding against the simulator is the exact code that would decide against the real API.
+There's no separate "demo mode" branch tucked away anywhere in `policy/`.
 
-Idempotency and resilience live entirely inside `RazorpayClient`, since the Executor
-Protocol's caller (the benchmark harness, or the live loop) never retries anything itself:
+Idempotency and resilience live entirely inside `RazorpayClient`, since whatever calls the
+Executor Protocol — the benchmark harness, or the live loop — never retries anything on its
+own:
 
 - **Idempotency (invariant 6).** Every `Attempt` carries a deterministic key —
-  `f"{invoice_id}:{attempt_index}:{action_type}"`. Razorpay's Payment Links API has no
-  idempotency-key header (unlike its Payouts and Refunds APIs), so `RazorpayClient` enforces
-  it itself: before ever calling `payment_link.create()`, it checks `LiveStore` for a row
-  already recorded under that key and reuses the existing link instead of creating a second
-  one.
+  `f"{invoice_id}:{attempt_index}:{action_type}"`. Razorpay's Payment Links API doesn't ship an
+  idempotency-key header (unlike its Payouts and Refunds APIs), so `RazorpayClient` enforces it
+  itself: before it ever calls `payment_link.create()`, it checks `LiveStore` for a row already
+  recorded under that key and reuses the existing link instead of creating a second one.
 - **Backoff and circuit breaking.** `razorpay.errors.ServerError` and connection-level
-  failures are retried with exponential backoff, reusing the same idempotency key. After
-  several consecutive exhausted calls, a circuit breaker opens and further calls fail fast
-  without touching the network — surfaced on the dashboard as the `razorpay` degraded badge.
-  `BadRequestError` is a genuine rejection, never retried.
+  failures get retried with exponential backoff, reusing the same idempotency key. After
+  enough consecutive exhausted calls, a circuit breaker opens and further calls fail fast
+  without touching the network at all — surfaced on the dashboard as the `razorpay` degraded
+  badge. `BadRequestError` is a genuine rejection and never gets retried.
 
 `SimulatorClient` and `RazorpayClient` are the only two files that construct an
-`AttemptOutcome`; `execute/razorpay_client.py` is the only file in the repo that imports
-`razorpay` (invariant 5).
+`AttemptOutcome`, and `execute/razorpay_client.py` is the only file in the whole repo that
+imports `razorpay` (invariant 5).
 
 ## The compliance guard
 
 `ComplianceGuard.evaluate()` (`compliance/guard.py`) runs every rule in `compliance/rules.py`
-against a proposed plan and returns `Approved` or `Rejected(rule_id, reason)` — it never
-silently mutates a plan, and it evaluates *every* rule rather than short-circuiting on the
-first failure, so the audit row always shows the full picture. Fifteen rules, each an
-independent, pure, table-tested function of `(Attempt, RuleContext)`:
+against a proposed plan and returns either `Approved` or `Rejected(rule_id, reason)`. It never
+quietly mutates a plan, and it evaluates *every* rule instead of stopping at the first
+failure, so the audit row always shows the full picture, not just whatever failed first.
+Fifteen rules, each an independent, pure, table-tested function of `(Attempt, RuleContext)`:
 
 | Rule | Guards against |
 |---|---|
@@ -113,21 +116,22 @@ independent, pure, table-tested function of `(Attempt, RuleContext)`:
 | `R014_MESSAGE_CONTENT` | sending a message whose amount, date or merchant name don't match the record verbatim, or that's missing the opt-out line |
 | `R015_ISSUER_DOWNTIME_GATE` | debiting through an issuer/rail currently reporting `severity: high`, unresolved downtime |
 
-Every numeric constant in `compliance/constants.py` carries a source comment — an RBI
-circular, an NPCI guideline, or a Razorpay-documented limit — never a bare magic number.
-`R015` has no numeric constant at all: its source is the downtime event itself, read live from
-`payment.fetchDownTime()` in the live loop and from the simulator's issuer-availability process
-in the benchmark, same schema either way (`domain/types.py`'s `DowntimeWindow`).
+Every numeric constant in `compliance/constants.py` carries a source comment: an RBI circular,
+an NPCI guideline, or a Razorpay-documented limit, never a bare magic number sitting there
+unexplained. `R015` doesn't even have a numeric constant — its source is the downtime event
+itself, read live from `payment.fetchDownTime()` in the live loop and from the simulator's
+issuer-availability process in the benchmark, same schema either way
+(`domain/types.py`'s `DowntimeWindow`).
 
-`tests/test_compliance_invariants.py` runs every policy arm end to end and asserts zero
-compliance violations across every attempt generated — this is the test the whole project
-answers to; it is never marked `xfail`, skipped, or loosened. If it fails, the policy is wrong,
-not the test.
+`tests/test_compliance_invariants.py` runs every policy arm end to end and checks for zero
+compliance violations across every single attempt generated. This is the test the whole
+project answers to, and it's never marked `xfail`, skipped, or loosened for any reason. If it
+fails, that means the policy is wrong — not the test.
 
 ## The audit trail
 
 `audit/log.py`'s `AuditLog` writes to two append-only SQLite tables, `DecisionRow` and
-`OutcomeRow`. Every decision is recorded *before* the action executes (invariant 7):
+`OutcomeRow`. Every decision gets recorded *before* the action executes (invariant 7):
 
 ```python
 class Decision(FrozenModel):
@@ -141,11 +145,12 @@ class Decision(FrozenModel):
     expected_value: Money
 ```
 
-The outcome — success, recovered amount, failure reason — is written separately once it's
-known, never by mutating the decision row. `audit/explain.py` turns a structured decision
-record into one human sentence via the LLM for the dashboard's decision inspector; the
-structured record stays authoritative and the sentence is never load-bearing — a rule this
-codebase takes literally: nothing in `policy/` or `compliance/` ever reads an LLM's output.
+The outcome — success, recovered amount, failure reason — gets written separately once it's
+actually known, never by mutating the decision row after the fact. `audit/explain.py` turns a
+structured decision record into one plain-English sentence via the LLM, for the dashboard's
+decision inspector, but the structured record stays authoritative and the sentence is never
+load-bearing. I take that rule literally: nothing in `policy/` or `compliance/` ever reads
+anything an LLM produced.
 
 ## Live vs. benchmark, side by side
 
@@ -157,5 +162,5 @@ codebase takes literally: nothing in `policy/` or `compliance/` ever reads an LL
 | State | in-memory `Cohort`, one `AuditLog` per arm | `api/store.py`'s `LiveStore` (open invoices, dedup, dead letters), plus the same `AuditLog` |
 | Success known | synchronously, from `World.attempt()` | asynchronously — a `payment_link.paid` webhook, consumed by `api/webhooks.py` |
 
-Everything upstream of the executor — diagnose, policy, compliance — is the exact same code
-in both columns.
+Everything upstream of the executor — diagnose, policy, compliance — is the exact same code in
+both columns. That's the whole point.

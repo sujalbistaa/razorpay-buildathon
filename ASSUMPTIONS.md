@@ -1,11 +1,14 @@
 # ASSUMPTIONS.md
 
-The human-readable version of [`src/vasool/sim/world.yaml`](src/vasool/sim/world.yaml) — every
-number the simulator runs on, split into what's **Sourced** (a specific published claim, with a
-URL) and what's **Estimated** (reasoned, because no public source exists for it). A third
-category, **Policy parameter**, isn't a claim about the world at all — it's a declared dial.
+This is the human-readable version of
+[`src/vasool/sim/world.yaml`](src/vasool/sim/world.yaml) — every number the simulator runs on,
+split into what's **Sourced** (a specific published claim, with a URL attached) and what's
+**Estimated** (reasoned out, because no public source exists for it). There's a third
+category too, **Policy parameter**, which isn't really a claim about the world at all — it's a
+dial I set on purpose.
 
-Never blur these three. The benchmark's honesty depends on it.
+I'm keeping these three strictly separate. The benchmark's honesty depends on that separation
+holding.
 
 ## Sourced
 
@@ -17,15 +20,15 @@ Never blur these three. The benchmark's honesty depends on it.
 | Downtime event schema (`method`, `instrument.issuer`, `severity`, `scheduled`, `begin`, `end`) | — | [razorpay.com/docs/api/payments/downtime/entity](https://razorpay.com/docs/api/payments/downtime/entity) |
 | A month-end congestion effect on downtime exists | — | BUILD_DOC.md §3.2: "that's when Indian recurring debit volume spikes" |
 
-The *shape* of each of these is sourced; most of the *magnitude* (the spread around the 1st, the
-exact rail percentages, the congestion multiplier) is not published anywhere and is marked
-Estimated below even where the underlying pattern is Sourced.
+The *shape* of each of these is genuinely sourced. Most of the *magnitude* — the spread around
+the 1st, the exact rail percentages, the congestion multiplier — isn't published anywhere, and
+I've marked it Estimated below even in cases where the underlying pattern itself is Sourced.
 
 ## Estimated
 
-No public source publishes a per-customer distribution for any of these. Each is a reasoned
-placeholder, chosen so the simulator produces a plausible failure mix — not a claim about the
-real Indian payments market.
+No public source publishes a per-customer distribution for any of the parameters below. Each
+one is a reasoned placeholder, picked so the simulator produces a plausible failure mix — not
+a claim about the real Indian payments market, and I don't want to imply otherwise.
 
 | Parameter | Value | Reasoning |
 |---|---|---|
@@ -54,28 +57,29 @@ real Indian payments market.
 
 | Parameter | Value | Why it isn't Estimated |
 |---|---|---|
-| `annoyance_cost_paise` | ₹5.00 | encodes the merchant's tolerance for contacting a customer, per attempt. There is no empirical basis to estimate — it's a declared dial. Swept across values in the Phase 8 robustness run rather than presented as a measurement. |
+| `annoyance_cost_paise` | ₹5.00 | encodes the merchant's tolerance for contacting a customer, per attempt. There's no empirical basis to estimate this from — it's a dial I declared. Swept across values in the Phase 8 robustness run rather than presented as a measurement. |
 
 ## Two modeling choices, flagged rather than silently made
 
 BUILD_DOC.md §3.1 lists card states as `valid | expiring_on | blocked | reissued`, but §3.3's
-resolution order checks `card.state == expired` — a name that doesn't appear in §3.1's own list.
-`world.yaml` and `sim/world.py` use `expired` (matching §3.3's actual logic, since that's what's
-operative) rather than `expiring_on`.
+resolution order actually checks `card.state == expired` — a name that doesn't show up
+anywhere in §3.1's own list. I went with `expired` in `world.yaml` and `sim/world.py`, matching
+§3.3's actual logic, since that's the version that's operative.
 
-§3.3's resolution order doesn't have a branch for `intent_to_pay: false` (a customer who has
-genuinely churned). Rather than adding a resolution branch the source doc doesn't list, a churned
-customer's `balance(t)` is modeled as always `₹0` — so "never recoverable" falls out of the
-existing `balance(t) < amount → INSUFFICIENT_FUNDS` branch causally, instead of needing a special
-case. See `BalanceProcess.balance_at` in `sim/world.py`.
+§3.3's resolution order also has no branch for `intent_to_pay: false` — a customer who's
+genuinely churned. Rather than bolting on a resolution branch the source doc never lists, I
+modeled a churned customer's `balance(t)` as always `₹0`, so "never recoverable" falls out of
+the existing `balance(t) < amount → INSUFFICIENT_FUNDS` branch causally, instead of needing a
+special case bolted on top. See `BalanceProcess.balance_at` in `sim/world.py`.
 
 ## What this means for interpreting the benchmark
 
 Every number `make bench` prints is measured against *this* simulator, not against the real
-Indian payments market. The Sourced parameters anchor the simulator's shape to real, published
-constraints (the AFA ceiling, the payday-clustering pattern, the downtime event schema); the
-Estimated parameters and the one Policy parameter are where the simulator's absolute numbers
-could be wrong even if its qualitative behavior (soft declines recovering, hard declines not,
-downtime-gated retries reducing false dunning) is right. The robustness sweep (BUILD_DOC.md §8)
-exists specifically to show which part of the result survives when the Estimated parameters are
-perturbed ±30–50% — that sweep, not the headline number, is the credible claim.
+Indian payments market — I want that said plainly, not buried. The Sourced parameters anchor
+the simulator's shape to real, published constraints (the AFA ceiling, the payday-clustering
+pattern, the downtime event schema); the Estimated parameters and the one Policy parameter are
+where the simulator's absolute numbers could be wrong even if its qualitative behavior (soft
+declines recovering, hard declines not, downtime-gated retries cutting down on false dunning)
+is right. The robustness sweep (BUILD_DOC.md §8) exists specifically to show which part of the
+result survives when the Estimated parameters get perturbed ±30–50% — that sweep, not the
+headline number, is the claim actually worth trusting.
