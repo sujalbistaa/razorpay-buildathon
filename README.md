@@ -6,7 +6,7 @@
 
 <a href="https://github.com/sujalbistaa/razorpay-buildathon/actions/workflows/ci.yml"><img src="https://github.com/sujalbistaa/razorpay-buildathon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 <img src="https://img.shields.io/badge/python-3.11-146b45?style=flat-square&labelColor=1c1b17" alt="python 3.11">
-<img src="https://img.shields.io/badge/tests-324_passing-146b45?style=flat-square&labelColor=1c1b17" alt="324 tests passing">
+<img src="https://img.shields.io/badge/tests-325_passing-146b45?style=flat-square&labelColor=1c1b17" alt="325 tests passing">
 <img src="https://img.shields.io/badge/compliance_violations-0-146b45?style=flat-square&labelColor=1c1b17" alt="zero compliance violations">
 <img src="https://img.shields.io/badge/mypy-strict-146b45?style=flat-square&labelColor=1c1b17" alt="mypy strict">
 <img src="https://img.shields.io/badge/docker_compose_up-77s_cold-146b45?style=flat-square&labelColor=1c1b17" alt="docker compose up in 77 seconds">
@@ -226,7 +226,7 @@ revora/
 │   ├── llm/              Groq client with a Gemini fallback (stub-mode too), narrative, policy compiler
 │   └── chaos.py          `make chaos` — 7 fault-injection scenarios
 ├── scripts/              seed.py, bench.py, live_demo.py, load_test.py
-├── tests/                324 tests: table-driven compliance cases, hypothesis property tests
+├── tests/                325 tests: table-driven compliance cases, hypothesis property tests
 │                         (hundreds of randomized inputs per run against 4 rules), determinism,
 │                         idempotency, and test_compliance_invariants.py
 └── benchmarks/            results.json, report.md, robustness.md, plots — committed deliberately
@@ -242,7 +242,7 @@ revora/
 ```
 make install     # creates .venv, installs the pinned toolchain
 make bench       # regenerates benchmarks/results.json, report.md, the plots above (~90s)
-make test        # 324 tests, ~13s, includes test_compliance_invariants.py
+make test        # 325 tests, ~13s, includes test_compliance_invariants.py
 make chaos       # 7 fault-injection scenarios against the real code paths above (~2s)
 make load        # p50/p99 webhook ingestion latency against a real running instance (~5s)
 ```
